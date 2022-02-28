@@ -447,15 +447,13 @@ func (trie *BinTrie) RemapIfAbsent(key TrieKey, supplier func() V, insertNil boo
 }
 
 func (trie *BinTrie) remapImpl(key TrieKey, remapper func(V) (V, remapAction)) *BinTrieNode {
+	root := trie.ensureRoot(key)
 	result := &opResult{
 		key:      key,
 		op:       remap,
 		remapper: remapper,
 	}
-	root := trie.absoluteRoot()
-	if root != nil {
-		root.matchBits(result)
-	}
+	root.matchBits(result)
 	resultNode := result.existingNode
 	if resultNode == nil {
 		resultNode = result.inserted

@@ -1,2 +1,2 @@
 # bintree
-Binary trees
+Binary trees and tries

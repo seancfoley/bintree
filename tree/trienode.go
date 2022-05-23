@@ -111,9 +111,15 @@ type opResult struct {
 	remapper func(V) (V, remapAction)
 }
 
+var emptyPath Path
+
 func (result *opResult) getContaining() *Path {
+	containing := result.containing
+	if containing == nil {
+		return &emptyPath
+	}
 	return &Path{
-		root: result.containing,
+		root: containing,
 		leaf: result.containingEnd,
 	}
 }

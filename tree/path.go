@@ -66,6 +66,14 @@ type PathNode struct {
 	added bool
 }
 
+func (node *PathNode) Next() *PathNode {
+	return node.next
+}
+
+func (node *PathNode) Previous() *PathNode {
+	return node.previous
+}
+
 func (node *PathNode) getKey() (key E) {
 	if node != nil {
 		key = node.item

@@ -68,10 +68,10 @@ type opResult struct {
 
 	// A linked list of the tree elements, from largest to smallest,
 	// that contain the supplied argument, and the end of the list
-	containing, containingEnd,
+	//containing, containingEnd,
 
 	// The tree node with the smallest subnet or address containing the supplied argument
-	smallestContaining,
+	//smallestContaining,
 
 	// contained by:
 
@@ -82,6 +82,15 @@ type opResult struct {
 
 	// this tree was deleted
 	deleted *BinTrieNode
+
+	// contains:
+
+	// A linked list of the tree elements, from largest to smallest,
+	// that contain the supplied argument, and the end of the list
+	containing, containingEnd *PathNode
+
+	// The tree node with the smallest subnet or address containing the supplied argument
+	smallestContaining *BinTrieNode
 
 	// adds and puts:
 
@@ -102,62 +111,35 @@ type opResult struct {
 	remapper func(V) (V, remapAction)
 }
 
-func getNextAdded(node *BinTrieNode) *BinTrieNode {
-	for node != nil && !node.IsAdded() {
-		// Since only one of upper and lower can be populated, whether we start with upper or lower does not matter
-		next := node.GetUpperSubNode()
-		if next == nil {
-			node = node.GetLowerSubNode()
-		} else {
-			node = next
-		}
+func (result *opResult) getContaining() Path {
+	return Path{
+		root: result.containing,
+		leaf: result.containingEnd,
 	}
-	return node
-}
-
-func (result *opResult) getContaining() *BinTrieNode {
-	containing := getNextAdded(result.containing)
-	result.containing = containing
-	if containing != nil {
-		current := containing
-		for {
-			next := current.GetUpperSubNode()
-			var nextAdded *BinTrieNode
-			if next == nil {
-				next = current.GetLowerSubNode()
-				nextAdded = getNextAdded(next)
-				if next != nextAdded {
-					current.setLower(nextAdded)
-				}
-			} else {
-				nextAdded = getNextAdded(next)
-				if next != nextAdded {
-					current.setUpper(nextAdded)
-				}
-			}
-			current = nextAdded
-			if current == nil {
-				break
-			}
-		}
-	}
-	return containing
 }
 
 // add to the list of tree elements that contain the supplied argument
 func (result *opResult) addContaining(containingSub *BinTrieNode) {
-	cloned := containingSub.Clone()
-	if result.containing == nil {
-		result.containing = cloned
-	} else {
-		if result.containingEnd.Compare(cloned) > 0 {
-			result.containingEnd.setLower(cloned)
-		} else {
-			result.containingEnd.setUpper(cloned)
+	if containingSub.IsAdded() {
+		node := &PathNode{
+			item:       containingSub.item,
+			value:      containingSub.value,
+			storedSize: 1,
+			added:      true,
 		}
-		result.containingEnd.adjustCount(1)
+		if result.containing == nil {
+			result.containing = node
+		} else {
+			last := result.containingEnd
+			last.next = node
+			node.previous = last
+			last.storedSize++
+			for next := last.previous; next != nil; next = next.previous {
+				next.storedSize++
+			}
+		}
+		result.containingEnd = node
 	}
-	result.containingEnd = cloned
 }
 
 type TrieKeyIterator interface {
@@ -518,7 +500,7 @@ func (node *BinTrieNode) ElementsContainedBy(key TrieKey) *BinTrieNode {
 
 // ElementsContaining finds the trie nodes containing the given key and returns them as a linked list
 // only added nodes are added to the linked list
-func (node *BinTrieNode) ElementsContaining(key TrieKey) *BinTrieNode {
+func (node *BinTrieNode) ElementsContaining(key TrieKey) Path {
 	result := &opResult{
 		key: key,
 		op:  containing,
@@ -675,9 +657,9 @@ func (node *BinTrieNode) handleContained(result *opResult, newPref int) {
 }
 
 func (node *BinTrieNode) handleContains(result *opResult) bool {
-	result.smallestContaining = node.toTrieNode()
+	result.smallestContaining = node
 	if result.op == containing {
-		result.addContaining(node.toTrieNode())
+		result.addContaining(node)
 		return true
 	}
 	return false
@@ -1268,7 +1250,7 @@ func (node *BinTrieNode) blockSizeNodeIterator(lowerSubNodeFirst, addedNodesOnly
 		size,
 		addedNodesOnly,
 		node.toBinTreeNode(),
-		func(one, two e) int {
+		func(one, two E) int {
 			val := BlockSizeCompare(one.(TrieKey), two.(TrieKey), reverseBlocksEqualSize)
 			return -val
 		})
@@ -1282,7 +1264,7 @@ func (node *BinTrieNode) blockSizeNodeIterator(lowerSubNodeFirst, addedNodesOnly
 func (node *BinTrieNode) BlockSizeCachingAllNodeIterator() CachingTrieNodeIterator {
 	iter := newCachingPriorityNodeIterator(
 		node.toBinTreeNode(),
-		func(one, two e) int {
+		func(one, two E) int {
 			val := BlockSizeCompare(one.(TrieKey), two.(TrieKey), false)
 			return -val
 		})

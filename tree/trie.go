@@ -344,7 +344,7 @@ func (trie *BinTrie) ElementsContainedBy(key TrieKey) *BinTrieNode {
 	return trie.absoluteRoot().ElementsContainedBy(key)
 }
 
-func (trie *BinTrie) ElementsContaining(key TrieKey) *BinTrieNode {
+func (trie *BinTrie) ElementsContaining(key TrieKey) Path {
 	return trie.absoluteRoot().ElementsContaining(key)
 }
 

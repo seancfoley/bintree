@@ -92,28 +92,28 @@ func (c *changeTracker) String() string {
 type bounds struct {
 }
 
-func (b *bounds) isInBounds(item e) bool {
+func (b *bounds) isInBounds(item E) bool {
 	return true
 }
 
-func (b *bounds) isWithinLowerBound(item e) bool {
+func (b *bounds) isWithinLowerBound(item E) bool {
 	return true
 }
 
-func (b *bounds) isBelowLowerBound(item e) bool {
+func (b *bounds) isBelowLowerBound(item E) bool {
 	return true
 }
 
-func (b *bounds) isWithinUpperBound(item e) bool {
+func (b *bounds) isWithinUpperBound(item E) bool {
 	return true
 }
 
-func (b *bounds) isAboveUpperBound(item e) bool {
+func (b *bounds) isAboveUpperBound(item E) bool {
 	return true
 }
 
-// e is a key for a binary tree node
-type e interface{}
+// E is a key for a binary tree node
+type E interface{}
 
 // values for an associative binary tree
 type V interface{}
@@ -124,7 +124,7 @@ type C interface{}
 const sizeUnknown = -1
 
 type binTreeNode struct {
-	//TODO LATER generics - e could be a generic, but to be consistent with clone,
+	//TODO LATER generics - E could be a generic, but to be consistent with clone,
 	// need to be careful about copies/clones, maybe consistent with interfaces (this might not be necessary)
 	// On the one hand, you don't necessarily want to restrict users to using a single type for all keys,
 	// for instance a different key for prefix blocks than for others
@@ -137,13 +137,13 @@ type binTreeNode struct {
 	// 3. places where you want to avoid boilerplate code, mostly with slices
 	//
 	// So, for 2 I'd say keys need to be generic, and for 1 and 2 values need to be
-	// Also note that any place you use TrieKey or e, you need to replace with a generic type.
-	// For e, a simple generic type.  For TrieKey, an additional one that has the TrieKey interface as constraint.
+	// Also note that any place you use TrieKey or E, you need to replace with a generic type.
+	// For E, a simple generic type.  For TrieKey, an additional one that has the TrieKey interface as constraint.
 
 	// the key for the node
-	item e
+	item E
 
-	// only for associate trie nodes
+	// only for associative trie nodes
 	value V //TODO LATER generics - this could be a generic, but to be consistent with clone, need to be careful about copies/clones, maybe consistent with interfaces (this might not be necessary)
 
 	parent, lower, upper *binTreeNode
@@ -193,22 +193,24 @@ func (node *binTreeNode) toTrieNode() *BinTrieNode {
 }
 
 // when FREEZE_ROOT is true, this is never called (and FREEZE_ROOT is always true)
-func (node *binTreeNode) setKey(item e) {
+func (node *binTreeNode) setKey(item E) {
 	node.item = item
 }
 
 // Gets the key used for placing the node in the tree.
-func (node *binTreeNode) getKey() (key e) {
+func (node *binTreeNode) getKey() (key E) {
 	if node != nil {
 		key = node.item
 	}
 	return
 }
 
+// SetValue assigns a value to the node, overwriting any previous value
 func (node *binTreeNode) SetValue(val V) {
 	node.value = val
 }
 
+// GetValue returns the value assigned to the node
 func (node *binTreeNode) GetValue() (val V) {
 	if node != nil {
 		val = node.value
@@ -893,6 +895,32 @@ const (
 	belowElbows     = "  "
 )
 
+type node interface {
+	getKey() E
+	GetValue() V
+	IsAdded() bool
+}
+
+// nodeString returns a visual representation of the given node including the key, with an open circle indicating this node is not an added node,
+// a closed circle indicating this node is an added node.
+func nodeString(node node) string {
+	if node == nil {
+		return nilString()
+	}
+	key := node.getKey()
+	val := node.GetValue()
+	if val == nil {
+		if node.IsAdded() {
+			return fmt.Sprint(addedNodeCircle, " ", key)
+		}
+		return fmt.Sprint(nonAddedNodeCircle, " ", key)
+	}
+	if node.IsAdded() {
+		return fmt.Sprint(addedNodeCircle, " ", key, " = ", val)
+	}
+	return fmt.Sprint(nonAddedNodeCircle, " ", key, " = ", val)
+}
+
 type indents struct {
 	nodeIndent, subNodeInd string
 }
@@ -978,24 +1006,9 @@ func nilString() string {
 // a closed circle indicating this node is an added node.
 func (node *binTreeNode) String() string {
 	if node == nil {
-		return nilString()
+		return nodeString(nil)
 	}
-	key := node.getKey()
-	val := node.GetValue()
-	if val == nil {
-		if node.IsAdded() {
-			return fmt.Sprint(addedNodeCircle, " ", key)
-			//return fmt.Sprintf(addedNodeCircle+" %v", key)
-			//return addedNodeCircle + " " + node.getNodeIdentifier()
-		}
-		return fmt.Sprint(nonAddedNodeCircle, " ", key)
-	}
-	if node.IsAdded() {
-		return fmt.Sprint(addedNodeCircle, " ", key, " = ", val)
-		//return fmt.Sprintf(addedNodeCircle+" %v = %v", key, val)
-		//return addedNodeCircle + " " + node.getNodeIdentifier()
-	}
-	return fmt.Sprint(nonAddedNodeCircle, " ", key, " = ", val)
+	return nodeString(node)
 }
 
 func (node binTreeNode) format(state fmt.State, verb rune) {

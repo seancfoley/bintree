@@ -26,11 +26,11 @@ type HasNext interface {
 type keyIterator interface {
 	HasNext
 
-	Next() e
+	Next() E
 
 	// Remove removes the last iterated element from the underlying trie, and returns that element.
 	// If there is no such element, it returns nil.
-	Remove() e
+	Remove() E
 }
 
 type nodeIteratorRem interface {
@@ -51,7 +51,7 @@ type binTreeKeyIterator struct {
 	nodeIteratorRem
 }
 
-func (iter binTreeKeyIterator) Next() e {
+func (iter binTreeKeyIterator) Next() E {
 	node := iter.nodeIteratorRem.Next()
 	if node != nil {
 		return node.getKey()
@@ -59,7 +59,7 @@ func (iter binTreeKeyIterator) Next() e {
 	return nil
 }
 
-func (iter binTreeKeyIterator) Remove() e {
+func (iter binTreeKeyIterator) Remove() E {
 	node := iter.nodeIteratorRem.Remove()
 	if node != nil {
 		return node.getKey()
@@ -235,7 +235,7 @@ func newPriorityNodeIterator(
 	treeSize int,
 	addedOnly bool,
 	start *binTreeNode,
-	comparator func(e, e) int,
+	comparator func(E, E) int,
 ) binTreeNodeIterator {
 	return newPriorityNodeIteratorBounded(
 		nil,
@@ -250,7 +250,7 @@ func newPriorityNodeIteratorBounded(
 	treeSize int,
 	addedOnly bool,
 	start *binTreeNode,
-	comparator func(e, e) int) binTreeNodeIterator {
+	comparator func(E, E) int) binTreeNodeIterator {
 
 	comp := func(one, two interface{}) int {
 		node1, node2 := one.(*binTreeNode), two.(*binTreeNode)
@@ -304,7 +304,7 @@ func newPriorityNodeIteratorBounded(
 
 func newCachingPriorityNodeIterator(
 	start *binTreeNode,
-	comparator func(e, e) int,
+	comparator func(E, E) int,
 ) cachingPriorityNodeIterator {
 	return newCachingPriorityNodeIteratorSized(
 		0,
@@ -315,7 +315,7 @@ func newCachingPriorityNodeIterator(
 func newCachingPriorityNodeIteratorSized(
 	treeSize int,
 	start *binTreeNode,
-	comparator func(e, e) int) cachingPriorityNodeIterator {
+	comparator func(E, E) int) cachingPriorityNodeIterator {
 
 	comp := func(one, two interface{}) int {
 		cached1, cached2 := one.(*cached), two.(*cached)
@@ -544,7 +544,7 @@ type subNodeCachingIterator struct {
 	binTreeNodeIterator
 
 	cacheItem  C
-	nextKey    e
+	nextKey    E
 	nextCached C
 	stack      []interface{}
 	stackIndex int

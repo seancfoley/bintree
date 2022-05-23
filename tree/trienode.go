@@ -111,8 +111,8 @@ type opResult struct {
 	remapper func(V) (V, remapAction)
 }
 
-func (result *opResult) getContaining() Path {
-	return Path{
+func (result *opResult) getContaining() *Path {
+	return &Path{
 		root: result.containing,
 		leaf: result.containingEnd,
 	}
@@ -500,7 +500,7 @@ func (node *BinTrieNode) ElementsContainedBy(key TrieKey) *BinTrieNode {
 
 // ElementsContaining finds the trie nodes containing the given key and returns them as a linked list
 // only added nodes are added to the linked list
-func (node *BinTrieNode) ElementsContaining(key TrieKey) Path {
+func (node *BinTrieNode) ElementsContaining(key TrieKey) *Path {
 	result := &opResult{
 		key: key,
 		op:  containing,

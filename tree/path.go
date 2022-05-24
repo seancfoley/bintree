@@ -47,7 +47,27 @@ func (path *Path) String() string {
 
 // ListString returns a visual representation of the tree with one node per line, with or without the non-added keys.
 func (path *Path) ListString(withNonAddedKeys bool) string {
+	if path.Size() == 0 {
+		builder := strings.Builder{}
+		builder.WriteByte('\n')
+		if path == nil || !withNonAddedKeys {
+			builder.WriteString(nilString())
+		} else {
+			builder.WriteString(nonAddedNodeCircle)
+		}
+		builder.WriteByte('\n')
+		return builder.String()
+	}
 	return path.GetRoot().ListString(withNonAddedKeys, true)
+}
+
+// Size returns the count of nodes in the list
+// This is a constant-time operation since the size is maintained in each node.
+func (path *Path) Size() (storedSize int) {
+	if path == nil || path.root == nil {
+		return 0
+	}
+	return path.root.Size()
 }
 
 // PathNode is an element in the list of a Path
@@ -106,7 +126,7 @@ func (node *PathNode) IsAdded() bool {
 }
 
 // Size returns the count of nodes added to the sub-tree starting from this node as root and moving downwards to sub-nodes.
-// This is a constant-time operation since the size is maintained in each node and adjusted with each add and Remove operation in the sub-tree.
+// This is a constant-time operation since the size is maintained in each node.
 func (node *PathNode) Size() (storedSize int) {
 	if node != nil {
 		storedSize = node.storedSize

@@ -64,15 +64,6 @@ type opResult struct {
 	// if searching for a ceiling/higher, and the nearest node is below addr, then we must backtrack to get above
 	backtrackNode,
 
-	// contains:
-
-	// A linked list of the tree elements, from largest to smallest,
-	// that contain the supplied argument, and the end of the list
-	//containing, containingEnd,
-
-	// The tree node with the smallest subnet or address containing the supplied argument
-	//smallestContaining,
-
 	// contained by:
 
 	// this tree is contained by the supplied argument

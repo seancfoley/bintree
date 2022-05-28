@@ -20,12 +20,12 @@ import (
 	"strings"
 )
 
-// Path is a list of nodes derived from followin a path in a tree.
+// Path is a list of nodes derived from following a path in a tree.
 // Each node in the list corresponds to a node in the tree.
 // Each node in the list corresponds to a tree node that is a direct or indirect sub-node of the tree node corresponding to the previous node in the list.
 // Not all nodes in the pathway through the tree need to be included in the linked list.
 //
-// In other words, a path follows a pathway through a tree from to leaf, but not necessarily including all nodes encountered along the way.
+// In other words, a path follows a pathway through a tree from root to leaf, but not necessarily including all nodes encountered along the way.
 type Path struct {
 	root, leaf *PathNode
 }
@@ -86,10 +86,12 @@ type PathNode struct {
 	added bool
 }
 
+// Next returns the next node in the path
 func (node *PathNode) Next() *PathNode {
 	return node.next
 }
 
+// Previous returns the previous node in the path
 func (node *PathNode) Previous() *PathNode {
 	return node.previous
 }

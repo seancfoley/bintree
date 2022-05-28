@@ -20,12 +20,12 @@ import (
 	"strings"
 )
 
-// Path is a list of nodes derived from a tree.
+// Path is a list of nodes derived from followin a path in a tree.
 // Each node in the list corresponds to a node in the tree.
-// Each corresponding node is a direct or indirect sub-node of the previous corresponding node in the list.
+// Each node in the list corresponds to a tree node that is a direct or indirect sub-node of the tree node corresponding to the previous node in the list.
+// Not all nodes in the pathway through the tree need to be included in the linked list.
 //
-// In other words, a path follows a pathway through a tree from the root to a sub-node, possibly all the way to a leaf.
-// Not all nodes in the pathway need to included in the linked list.  Regardless, each node is a direct or indirect sub-node of the previous.
+// In other words, a path follows a pathway through a tree from to leaf, but not necessarily including all nodes encountered along the way.
 type Path struct {
 	root, leaf *PathNode
 }

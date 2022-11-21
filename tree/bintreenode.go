@@ -89,56 +89,47 @@ func (c *changeTracker) String() string {
 	return "current change: " + c.currentChange.String()
 }
 
-type bounds struct {
+type bounds[E Key] struct {
 }
 
-func (b *bounds) isInBounds(item E) bool {
+func (b *bounds[E]) isInBounds(item E) bool {
 	return true
 }
 
-func (b *bounds) isWithinLowerBound(item E) bool {
+func (b *bounds[E]) isWithinLowerBound(item E) bool {
 	return true
 }
 
-func (b *bounds) isBelowLowerBound(item E) bool {
+func (b *bounds[E]) isBelowLowerBound(item E) bool {
 	return true
 }
 
-func (b *bounds) isWithinUpperBound(item E) bool {
+func (b *bounds[E]) isWithinUpperBound(item E) bool {
 	return true
 }
 
-func (b *bounds) isAboveUpperBound(item E) bool {
+func (b *bounds[E]) isAboveUpperBound(item E) bool {
 	return true
 }
 
-// E is a key for a binary tree node
-type E interface{}
+//// E is a key for a binary tree node
+//type E interface{}
+//
+//// values for an associative binary tree
+//type V interface{}
 
-// values for an associative binary tree
-type V interface{}
+type Key interface {
+	comparable // needed by populateCacheItem
+
+	//TrieKey
+}
 
 // cached values for iterators
-type C interface{}
+type C any
 
 const sizeUnknown = -1
 
-type binTreeNode struct {
-	//TODO LATER generics - E could be a generic, but to be consistent with clone,
-	// need to be careful about copies/clones, maybe consistent with interfaces (this might not be necessary)
-	// On the one hand, you don't necessarily want to restrict users to using a single type for all keys,
-	// for instance a different key for prefix blocks than for others
-	// But they could use a wrapper instead.
-	// And generics are intended to make thigns type safe and avoid type assertions.
-	// So that suggests you use generics here.
-	// Case for generics vs interfaces:
-	// 1. places where you want to restrict to a single type (eg lists)
-	// 2. places where you want to avoid type assertions (this overlaps with 1)
-	// 3. places where you want to avoid boilerplate code, mostly with slices
-	//
-	// So, for 2 I'd say keys need to be generic, and for 1 and 2 values need to be
-	// Also note that any place you use TrieKey or E, you need to replace with a generic type.
-	// For E, a simple generic type.  For TrieKey, an additional one that has the TrieKey interface as constraint.
+type binTreeNode[E Key, V any] struct {
 
 	// the key for the node
 	item E
@@ -146,7 +137,7 @@ type binTreeNode struct {
 	// only for associative trie nodes
 	value V //TODO LATER generics - this could be a generic, but to be consistent with clone, need to be careful about copies/clones, maybe consistent with interfaces (this might not be necessary)
 
-	parent, lower, upper *binTreeNode
+	parent, lower, upper *binTreeNode[E, V]
 
 	storedSize int
 
@@ -155,7 +146,7 @@ type binTreeNode struct {
 	// some nodes represent elements added to the tree and others are nodes generated internally when other nodes are added
 	added bool
 
-	addr *binTreeNode
+	addr *binTreeNode[E, V]
 }
 
 // This hideptr trick is used in strings.Builder to trick escape analysis to ensure that this self-referential pointer does not cause automatic heap allocation
@@ -171,34 +162,43 @@ func hideptr(p unsafe.Pointer) unsafe.Pointer {
 	return unsafe.Pointer(ptr ^ 0)
 }
 
-func (node *binTreeNode) setAddr() {
-	node.addr = (*binTreeNode)(hideptr(unsafe.Pointer(node)))
+func (node *binTreeNode[E, V]) setAddr() {
+	node.addr = (*binTreeNode[E, V])(hideptr(unsafe.Pointer(node)))
 }
 
-func (node *binTreeNode) checkCopy() {
+func (node *binTreeNode[E, V]) checkCopy() {
 	if node != nil && node.addr != nil && node.addr != node {
 		panic("attempting to modify trie with a copied node")
 	}
 }
 
-func (node *binTreeNode) getChangeTracker() *changeTracker {
+func (node *binTreeNode[E, V]) getChangeTracker() *changeTracker {
 	if node == nil {
 		return nil
 	}
 	return node.cTracker
 }
 
-func (node *binTreeNode) toTrieNode() *BinTrieNode {
-	return (*BinTrieNode)(unsafe.Pointer(node))
+//func (node *binTreeNode[E, V]) toTrieNode() *BinTrieNode[E, V] { //   - but how?
+//	return toTrieNode(node)
+//	//return (*BinTrieNode[E, V])(unsafe.Pointer(node))
+//}
+
+//func toTrieNodeX[E1 Key, E2 TrieKey[E2], V any](node *binTreeNode[E1, V]) *BinTrieNode[E2, V] {
+//	return (*BinTrieNode[E2, V])(unsafe.Pointer(node))
+//}
+
+func toTrieNode[E TrieKey[E], V any](node *binTreeNode[E, V]) *BinTrieNode[E, V] {
+	return (*BinTrieNode[E, V])(unsafe.Pointer(node))
 }
 
 // when FREEZE_ROOT is true, this is never called (and FREEZE_ROOT is always true)
-func (node *binTreeNode) setKey(item E) {
+func (node *binTreeNode[E, V]) setKey(item E) {
 	node.item = item
 }
 
 // Gets the key used for placing the node in the tree.
-func (node *binTreeNode) getKey() (key E) {
+func (node *binTreeNode[E, V]) getKey() (key E) {
 	if node != nil {
 		key = node.item
 	}
@@ -206,43 +206,47 @@ func (node *binTreeNode) getKey() (key E) {
 }
 
 // SetValue assigns a value to the node, overwriting any previous value
-func (node *binTreeNode) SetValue(val V) {
+func (node *binTreeNode[E, V]) SetValue(val V) {
+	// new value assignment
 	node.value = val
 }
 
 // GetValue returns the value assigned to the node
-func (node *binTreeNode) GetValue() (val V) {
+func (node *binTreeNode[E, V]) GetValue() (val V) {
 	if node != nil {
 		val = node.value
 	}
 	return
 }
 
-func (node *binTreeNode) ClearValue() {
-	if node != nil {
-		node.value = nil
-	}
+func (node *binTreeNode[E, V]) ClearValue() {
+	var v V
+	// new value assignment
+	node.value = v
+	//if node != nil {
+	//	node.value = nil
+	//}
 }
 
 // Returns whether this is the root of the backing tree.
-func (node *binTreeNode) IsRoot() bool {
+func (node *binTreeNode[E, V]) IsRoot() bool {
 	return node != nil && node.parent == nil
 }
 
 // Gets the node from which this node is a direct child node, or nil if this is the root.
-func (node *binTreeNode) getParent() (parent *binTreeNode) {
+func (node *binTreeNode[E, V]) getParent() (parent *binTreeNode[E, V]) {
 	if node != nil {
 		parent = node.parent
 	}
 	return
 }
 
-func (node *binTreeNode) setParent(parent *binTreeNode) {
+func (node *binTreeNode[E, V]) setParent(parent *binTreeNode[E, V]) {
 	node.parent = parent
 }
 
 // Gets the direct child node whose key is largest in value
-func (node *binTreeNode) getUpperSubNode() (upper *binTreeNode) {
+func (node *binTreeNode[E, V]) getUpperSubNode() (upper *binTreeNode[E, V]) {
 	if node != nil {
 		upper = node.upper
 	}
@@ -250,21 +254,21 @@ func (node *binTreeNode) getUpperSubNode() (upper *binTreeNode) {
 }
 
 // Gets the direct child node whose key is smallest in value
-func (node *binTreeNode) getLowerSubNode() (lower *binTreeNode) {
+func (node *binTreeNode[E, V]) getLowerSubNode() (lower *binTreeNode[E, V]) {
 	if node != nil {
 		lower = node.lower
 	}
 	return
 }
 
-func (node *binTreeNode) setUpper(upper *binTreeNode) {
+func (node *binTreeNode[E, V]) setUpper(upper *binTreeNode[E, V]) {
 	node.upper = upper
 	if upper != nil {
 		upper.setParent(node)
 	}
 }
 
-func (node *binTreeNode) setLower(lower *binTreeNode) {
+func (node *binTreeNode[E, V]) setLower(lower *binTreeNode[E, V]) {
 	node.lower = lower
 	if lower != nil {
 		lower.setParent(node)
@@ -278,7 +282,7 @@ func (node *binTreeNode) setLower(lower *binTreeNode) {
 // Only added elements contribute to the size of a tree.
 // When removing nodes, non-added nodes are removed automatically whenever they are no longer needed,
 // which is when an added node has less than two added sub-nodes.
-func (node *binTreeNode) IsAdded() bool {
+func (node *binTreeNode[E, V]) IsAdded() bool {
 	return node != nil && node.added
 }
 
@@ -286,20 +290,20 @@ func (node *binTreeNode) IsAdded() bool {
 // If the node is already an added node, this method has no effect.
 // You cannot set an added node to non-added, for that you should Remove the node from the tree by calling Remove.
 // A non-added node will only remain in the tree if it needs to in the tree.
-func (node *binTreeNode) SetAdded() {
+func (node *binTreeNode[E, V]) SetAdded() {
 	if !node.added {
 		node.setNodeAdded(true)
 		node.adjustCount(1)
 	}
 }
 
-func (node *binTreeNode) setNodeAdded(added bool) {
+func (node *binTreeNode[E, V]) setNodeAdded(added bool) {
 	node.added = added
 }
 
 // Size returns the count of nodes added to the sub-tree starting from this node as root and moving downwards to sub-nodes.
 // This is a constant-time operation since the size is maintained in each node and adjusted with each add and Remove operation in the sub-tree.
-func (node *binTreeNode) Size() (storedSize int) {
+func (node *binTreeNode[E, V]) Size() (storedSize int) {
 	if node != nil {
 		storedSize = node.storedSize
 		if storedSize == sizeUnknown {
@@ -327,7 +331,7 @@ func (node *binTreeNode) Size() (storedSize int) {
 
 // NodeSize returns the count of all nodes in the tree starting from this node and extending to all sub-nodes.
 // Unlike for the Size method, this is not a constant-time operation and must visit all sub-nodes of this node.
-func (node *binTreeNode) NodeSize() int {
+func (node *binTreeNode[E, V]) NodeSize() int {
 	totalCount := 0
 	iterator := node.allNodeIterator(false)
 	next := iterator.Next()
@@ -338,7 +342,7 @@ func (node *binTreeNode) NodeSize() int {
 	return totalCount
 }
 
-func (node *binTreeNode) adjustCount(delta int) {
+func (node *binTreeNode[E, V]) adjustCount(delta int) {
 	if delta != 0 {
 		thisNode := node
 		for {
@@ -356,7 +360,7 @@ func (node *binTreeNode) adjustCount(delta int) {
 // If it has two sub-nodes, it cannot be removed from the tree, in which case it is marked as not "added",
 // nor is it counted in the tree size.
 // Only added nodes can be removed from the tree.  If this node is not added, this method does nothing.
-func (node *binTreeNode) Remove() {
+func (node *binTreeNode[E, V]) Remove() {
 	node.checkCopy()
 	if !node.IsAdded() {
 		return
@@ -371,7 +375,7 @@ func (node *binTreeNode) Remove() {
 	}
 }
 
-func (node *binTreeNode) removed() {
+func (node *binTreeNode[E, V]) removed() {
 	node.adjustCount(-1)
 	node.setNodeAdded(false)
 	node.cTracker.changed()
@@ -379,12 +383,12 @@ func (node *binTreeNode) removed() {
 }
 
 // Makes the parent of this point to something else, thus removing this and all sub-nodes from the tree
-func (node *binTreeNode) replaceThis(replacement *binTreeNode) {
+func (node *binTreeNode[E, V]) replaceThis(replacement *binTreeNode[E, V]) {
 	node.replaceThisRecursive(replacement, 0)
 	node.cTracker.changed()
 }
 
-func (node *binTreeNode) replaceThisRecursive(replacement *binTreeNode, additionalSizeAdjustment int) {
+func (node *binTreeNode[E, V]) replaceThisRecursive(replacement *binTreeNode[E, V], additionalSizeAdjustment int) {
 	if node.IsRoot() {
 		node.replaceThisRoot(replacement)
 		return
@@ -405,12 +409,12 @@ func (node *binTreeNode) replaceThisRecursive(replacement *binTreeNode, addition
 	}
 }
 
-func (node *binTreeNode) adjustTree(parent, replacement *binTreeNode, additionalSizeAdjustment int, replacedUpper bool) {
+func (node *binTreeNode[E, V]) adjustTree(parent, replacement *binTreeNode[E, V], additionalSizeAdjustment int, replacedUpper bool) {
 	sizeAdjustment := -node.storedSize
 	if replacement == nil {
 		if !parent.IsAdded() && (!freezeRoot || !parent.IsRoot()) {
 			parent.storedSize += sizeAdjustment
-			var parentReplacement *binTreeNode
+			var parentReplacement *binTreeNode[E, V]
 			if replacedUpper {
 				parentReplacement = parent.getLowerSubNode()
 			} else {
@@ -426,13 +430,15 @@ func (node *binTreeNode) adjustTree(parent, replacement *binTreeNode, additional
 	node.setParent(nil)
 }
 
-func (node *binTreeNode) replaceThisRoot(replacement *binTreeNode) {
+func (node *binTreeNode[E, V]) replaceThisRoot(replacement *binTreeNode[E, V]) {
 	if replacement == nil {
 		node.setNodeAdded(false)
 		node.setUpper(nil)
 		node.setLower(nil)
 		if !freezeRoot {
-			node.setKey(nil)
+			var e E
+			node.setKey(e)
+			//node.setKey(nil)
 			// here we'd need to replace with the default root (ie call setKey with key of 0.0.0.0/0 or ::/0 or 0:0:0:0:0:0)
 		}
 		node.storedSize = 0
@@ -449,7 +455,7 @@ func (node *binTreeNode) replaceThisRoot(replacement *binTreeNode) {
 }
 
 // Clear removes this node and all sub-nodes from the sub-tree with this node as the root, after which isEmpty() will return true.
-func (node *binTreeNode) Clear() {
+func (node *binTreeNode[E, V]) Clear() {
 	node.checkCopy()
 	if node != nil {
 		node.replaceThis(nil)
@@ -457,18 +463,18 @@ func (node *binTreeNode) Clear() {
 }
 
 // IsEmpty returns where there are not any elements in the sub-tree with this node as the root.
-func (node *binTreeNode) IsEmpty() bool {
+func (node *binTreeNode[E, V]) IsEmpty() bool {
 	return !node.IsAdded() && node.getUpperSubNode() == nil && node.getLowerSubNode() == nil
 }
 
 // IsLeaf returns whether this node is in the tree (a node for which IsAdded() is true)
 // and there are no elements in the sub-tree with this node as the root.
-func (node *binTreeNode) IsLeaf() bool {
+func (node *binTreeNode[E, V]) IsLeaf() bool {
 	return node.IsAdded() && node.getUpperSubNode() == nil && node.getLowerSubNode() == nil
 }
 
 // Returns the first (lowest valued) node in the sub-tree originating from this node.
-func (node *binTreeNode) firstNode() *binTreeNode {
+func (node *binTreeNode[E, V]) firstNode() *binTreeNode[E, V] {
 	first := node
 	for {
 		lower := first.getLowerSubNode()
@@ -481,7 +487,7 @@ func (node *binTreeNode) firstNode() *binTreeNode {
 
 // Returns the first (lowest valued) added node in the sub-tree originating from this node,
 // or nil if there are no added entries in this tree or sub-tree
-func (node *binTreeNode) firstAddedNode() *binTreeNode {
+func (node *binTreeNode[E, V]) firstAddedNode() *binTreeNode[E, V] {
 	first := node.firstNode()
 	if first.IsAdded() {
 		return first
@@ -490,7 +496,7 @@ func (node *binTreeNode) firstAddedNode() *binTreeNode {
 }
 
 // Returns the last (highest valued) node in the sub-tree originating from this node.
-func (node *binTreeNode) lastNode() *binTreeNode {
+func (node *binTreeNode[E, V]) lastNode() *binTreeNode[E, V] {
 	last := node
 	for {
 		upper := last.getUpperSubNode()
@@ -503,7 +509,7 @@ func (node *binTreeNode) lastNode() *binTreeNode {
 
 // Returns the last (highest valued) added node in the sub-tree originating from this node,
 // or nil if there are no added entries in this tree or sub-tree
-func (node *binTreeNode) lastAddedNode() *binTreeNode {
+func (node *binTreeNode[E, V]) lastAddedNode() *binTreeNode[E, V] {
 	last := node.lastNode()
 	if last.IsAdded() {
 		return last
@@ -511,9 +517,9 @@ func (node *binTreeNode) lastAddedNode() *binTreeNode {
 	return last.previousAddedNode()
 }
 
-func (node *binTreeNode) firstPostOrderNode() *binTreeNode {
+func (node *binTreeNode[E, V]) firstPostOrderNode() *binTreeNode[E, V] {
 	next := node
-	var nextNext *binTreeNode
+	var nextNext *binTreeNode[E, V]
 	for {
 		nextNext = next.getLowerSubNode()
 		if nextNext == nil {
@@ -526,9 +532,9 @@ func (node *binTreeNode) firstPostOrderNode() *binTreeNode {
 	}
 }
 
-func (node *binTreeNode) lastPreOrderNode() *binTreeNode {
+func (node *binTreeNode[E, V]) lastPreOrderNode() *binTreeNode[E, V] {
 	next := node
-	var nextNext *binTreeNode
+	var nextNext *binTreeNode[E, V]
 	for {
 		nextNext = next.getUpperSubNode()
 		if nextNext == nil {
@@ -542,7 +548,7 @@ func (node *binTreeNode) lastPreOrderNode() *binTreeNode {
 }
 
 // Returns the node that follows this node following the tree order
-func (node *binTreeNode) nextNode() *binTreeNode {
+func (node *binTreeNode[E, V]) nextNode() *binTreeNode[E, V] {
 	return node.nextNodeBounded(nil)
 }
 
@@ -551,8 +557,9 @@ func (node *binTreeNode) nextNode() *binTreeNode {
 //				8x
 //		4x					12x
 //	2x		6x			10x		14x
-//1x 3x		5x 7x		9x 11x	13x 15x
-func (node *binTreeNode) nextNodeBounded(bound *binTreeNode) *binTreeNode {
+//
+// 1x 3x		5x 7x		9x 11x	13x 15x
+func (node *binTreeNode[E, V]) nextNodeBounded(bound *binTreeNode[E, V]) *binTreeNode[E, V] {
 	next := node.getUpperSubNode()
 	if next != nil {
 		for {
@@ -580,7 +587,7 @@ func (node *binTreeNode) nextNodeBounded(bound *binTreeNode) *binTreeNode {
 }
 
 // Returns the node that precedes this node following the tree order.
-func (node *binTreeNode) previousNode() *binTreeNode {
+func (node *binTreeNode[E, V]) previousNode() *binTreeNode[E, V] {
 	return node.previousNodeBounded(nil)
 }
 
@@ -589,8 +596,9 @@ func (node *binTreeNode) previousNode() *binTreeNode {
 //				8x
 //		12x					4x
 //	14x		10x			6x		2x
-//15x 13x	11x 9x		7x 5x	3x 1x
-func (node *binTreeNode) previousNodeBounded(bound *binTreeNode) *binTreeNode {
+//
+// 15x 13x	11x 9x		7x 5x	3x 1x
+func (node *binTreeNode[E, V]) previousNodeBounded(bound *binTreeNode[E, V]) *binTreeNode[E, V] {
 	previous := node.getLowerSubNode()
 	if previous != nil {
 		for {
@@ -620,10 +628,11 @@ func (node *binTreeNode) previousNodeBounded(bound *binTreeNode) *binTreeNode {
 //	pre order
 //				1x
 //		2x						9x
-//3x		6x				10x		13x
-//4x 5x		7x 8x		11x 12x		14x 15x
+//
+// 3x		6x				10x		13x
+// 4x 5x		7x 8x		11x 12x		14x 15x
 // this one starts from root, ends at last node, all the way right
-func (node *binTreeNode) nextPreOrderNode(end *binTreeNode) *binTreeNode {
+func (node *binTreeNode[E, V]) nextPreOrderNode(end *binTreeNode[E, V]) *binTreeNode[E, V] {
 	next := node.getLowerSubNode()
 	if next == nil {
 		// cannot go left/lower
@@ -656,10 +665,11 @@ func (node *binTreeNode) nextPreOrderNode(end *binTreeNode) *binTreeNode {
 //				1x
 //		9x					2x
 //	13x		10x			6x		3x
-//15x 14x	12x 11x		8x 7x	5x 4x
+//
+// 15x 14x	12x 11x		8x 7x	5x 4x
 // this one starts from root, ends at first node, all the way left
 // this is the mirror image of nextPreOrderNode, so no comments
-func (node *binTreeNode) previousPostOrderNode(end *binTreeNode) *binTreeNode {
+func (node *binTreeNode[E, V]) previousPostOrderNode(end *binTreeNode[E, V]) *binTreeNode[E, V] {
 	next := node.getUpperSubNode()
 	if next == nil {
 		next = node.getLowerSubNode()
@@ -694,7 +704,7 @@ func (node *binTreeNode) previousPostOrderNode(end *binTreeNode) *binTreeNode {
 
 // this one starts from last node, all the way right, ends at root
 // this is the mirror image of nextPostOrderNode, so no comments
-func (node *binTreeNode) previousPreOrderNode(end *binTreeNode) *binTreeNode {
+func (node *binTreeNode[E, V]) previousPreOrderNode(end *binTreeNode[E, V]) *binTreeNode[E, V] {
 	next := node.getParent()
 	if next == nil || next == end {
 		return nil
@@ -723,9 +733,10 @@ func (node *binTreeNode) previousPreOrderNode(end *binTreeNode) *binTreeNode {
 //				15x
 //		7x					14x
 //	3x		6x			10x		13x
-//1x 2x		4x 5x		8x 9x	11x 12x
+//
+// 1x 2x		4x 5x		8x 9x	11x 12x
 // this one starts from first node, all the way left, ends at root
-func (node *binTreeNode) nextPostOrderNode(end *binTreeNode) *binTreeNode {
+func (node *binTreeNode[E, V]) nextPostOrderNode(end *binTreeNode[E, V]) *binTreeNode[E, V] {
 	next := node.getParent()
 	if next == nil || next == end {
 		return nil
@@ -757,17 +768,26 @@ func (node *binTreeNode) nextPostOrderNode(end *binTreeNode) *binTreeNode {
 
 // Returns the next node in the tree that is an added node, following the tree order,
 // or nil if there is no such node.
-func (node *binTreeNode) nextAddedNode() *binTreeNode {
-	return node.nextAdded(nil, (*binTreeNode).nextNodeBounded)
+func (node *binTreeNode[E, V]) nextAddedNode() *binTreeNode[E, V] {
+	return node.nextAdded(nil, (*binTreeNode[E, V]).nextNodeBounded)
+	//
+	//f := (*binTreeNode[E, V]).nextNodeBounded
+	//return node.nextAdded(nil, f)
+	//
+	//return node.nextAdded(nil, func(current *binTreeNode[E, V], end *binTreeNode[E, V]) *binTreeNode[E, V] { TODO this works too
+	//	return current.nextNodeBounded(end)
+	//})
 }
 
 // Returns the previous node in the tree that is an added node, following the tree order in reverse,
 // or nil if there is no such node.
-func (node *binTreeNode) previousAddedNode() *binTreeNode {
-	return node.nextAdded(nil, (*binTreeNode).previousNodeBounded)
+func (node *binTreeNode[E, V]) previousAddedNode() *binTreeNode[E, V] {
+	return node.nextAdded(nil, (*binTreeNode[E, V]).previousNodeBounded) //TODO maybe this is just a Goland problem - see https://go.dev/play/p/eLbRIR5fHu6
 }
 
-func nextTest(current, end *binTreeNode, nextOperator func(current *binTreeNode, end *binTreeNode) *binTreeNode, tester func(current *binTreeNode) bool) *binTreeNode {
+//TODO check this one, seems to work.  Try it out in Goland: https://go.dev/play/p/lf8zJtGCKYI
+
+func nextTest[E Key, V any](current, end *binTreeNode[E, V], nextOperator func(current *binTreeNode[E, V], end *binTreeNode[E, V]) *binTreeNode[E, V], tester func(current *binTreeNode[E, V]) bool) *binTreeNode[E, V] {
 	for {
 		current = nextOperator(current, end)
 		if current == end || current == nil {
@@ -780,57 +800,57 @@ func nextTest(current, end *binTreeNode, nextOperator func(current *binTreeNode,
 	return current
 }
 
-func (node *binTreeNode) nextAdded(end *binTreeNode, nextOperator func(current *binTreeNode, end *binTreeNode) *binTreeNode) *binTreeNode {
-	return nextTest(node, end, nextOperator, (*binTreeNode).IsAdded)
+func (node *binTreeNode[E, V]) nextAdded(end *binTreeNode[E, V], nextOperator func(current *binTreeNode[E, V], end *binTreeNode[E, V]) *binTreeNode[E, V]) *binTreeNode[E, V] {
+	return nextTest(node, end, nextOperator, (*binTreeNode[E, V]).IsAdded)
 }
 
-func (node *binTreeNode) nextInBounds(end *binTreeNode, nextOperator func(current *binTreeNode, end *binTreeNode) *binTreeNode, bnds *bounds) *binTreeNode {
-	return nextTest(node, end, nextOperator, func(current *binTreeNode) bool {
+func (node *binTreeNode[E, V]) nextInBounds(end *binTreeNode[E, V], nextOperator func(current *binTreeNode[E, V], end *binTreeNode[E, V]) *binTreeNode[E, V], bnds *bounds[E]) *binTreeNode[E, V] {
+	return nextTest(node, end, nextOperator, func(current *binTreeNode[E, V]) bool {
 		return bnds.isInBounds(current.getKey())
 	})
 }
 
 // Returns an iterator that iterates through the elements of the sub-tree with this node as the root.
 // The iteration is in sorted element order.
-func (node *binTreeNode) iterator() keyIterator {
-	return binTreeKeyIterator{node.nodeIterator(true)}
+func (node *binTreeNode[E, V]) iterator() keyIterator[E] {
+	return binTreeKeyIterator[E, V]{node.nodeIterator(true)}
 }
 
 // Returns an iterator that iterates through the elements of the subtrie with this node as the root.
 // The iteration is in reverse sorted element order.
-func (node *binTreeNode) descendingIterator() keyIterator {
-	return binTreeKeyIterator{node.nodeIterator(false)}
+func (node *binTreeNode[E, V]) descendingIterator() keyIterator[E] {
+	return binTreeKeyIterator[E, V]{node.nodeIterator(false)}
 }
 
 // Iterates through the added nodes of the sub-tree with this node as the root, in forward or reverse tree order.
-func (node *binTreeNode) nodeIterator(forward bool) nodeIteratorRem {
+func (node *binTreeNode[E, V]) nodeIterator(forward bool) nodeIteratorRem[E, V] {
 	return node.configuredNodeIterator(forward, true)
 }
 
 // Iterates through all the nodes of the sub-tree with this node as the root, in forward or reverse tree order.
-func (node *binTreeNode) allNodeIterator(forward bool) nodeIteratorRem {
+func (node *binTreeNode[E, V]) allNodeIterator(forward bool) nodeIteratorRem[E, V] {
 	return node.configuredNodeIterator(forward, false)
 }
 
-func (node *binTreeNode) containingFirstIterator(forwardSubNodeOrder bool) cachingNodeIterator {
+func (node *binTreeNode[E, V]) containingFirstIterator(forwardSubNodeOrder bool) cachingNodeIterator[E, V] {
 	return node.containingFirstNodeIterator(forwardSubNodeOrder, true)
 }
 
-func (node *binTreeNode) containingFirstAllNodeIterator(forwardSubNodeOrder bool) cachingNodeIterator {
+func (node *binTreeNode[E, V]) containingFirstAllNodeIterator(forwardSubNodeOrder bool) cachingNodeIterator[E, V] {
 	return node.containingFirstNodeIterator(forwardSubNodeOrder, false)
 }
 
-func (node *binTreeNode) containingFirstNodeIterator(forwardSubNodeOrder, addedNodesOnly bool) cachingNodeIterator {
-	var iter subNodeCachingIterator
+func (node *binTreeNode[E, V]) containingFirstNodeIterator(forwardSubNodeOrder, addedNodesOnly bool) cachingNodeIterator[E, V] {
+	var iter subNodeCachingIterator[E, V]
 	if forwardSubNodeOrder {
-		iter = newPreOrderNodeIterator( // remove is allowed
+		iter = newPreOrderNodeIterator[E, V]( // remove is allowed
 			true,           // forward
 			addedNodesOnly, // added only
 			node,
 			node.getParent(),
 			node.getChangeTracker())
 	} else {
-		iter = newPostOrderNodeIterator( // remove is allowed
+		iter = newPostOrderNodeIterator[E, V]( // remove is allowed
 			false,          // forward
 			addedNodesOnly, // added only
 			node,
@@ -840,25 +860,25 @@ func (node *binTreeNode) containingFirstNodeIterator(forwardSubNodeOrder, addedN
 	return &iter
 }
 
-func (node *binTreeNode) containedFirstIterator(forwardSubNodeOrder bool) nodeIteratorRem {
+func (node *binTreeNode[E, V]) containedFirstIterator(forwardSubNodeOrder bool) nodeIteratorRem[E, V] {
 	return node.containedFirstNodeIterator(forwardSubNodeOrder, true)
 }
 
-func (node *binTreeNode) containedFirstAllNodeIterator(forwardSubNodeOrder bool) nodeIterator {
+func (node *binTreeNode[E, V]) containedFirstAllNodeIterator(forwardSubNodeOrder bool) nodeIterator[E, V] {
 	return node.containedFirstNodeIterator(forwardSubNodeOrder, false)
 }
 
-func (node *binTreeNode) containedFirstNodeIterator(forwardSubNodeOrder, addedNodesOnly bool) nodeIteratorRem {
-	var iter subNodeCachingIterator
+func (node *binTreeNode[E, V]) containedFirstNodeIterator(forwardSubNodeOrder, addedNodesOnly bool) nodeIteratorRem[E, V] {
+	var iter subNodeCachingIterator[E, V]
 	if forwardSubNodeOrder {
-		iter = newPostOrderNodeIterator( // Remove is allowed if and only if added only
+		iter = newPostOrderNodeIterator[E, V]( // Remove is allowed if and only if added only
 			true,
 			addedNodesOnly, // added only
 			node.firstPostOrderNode(),
 			node.getParent(),
 			node.getChangeTracker())
 	} else {
-		iter = newPreOrderNodeIterator( // Remove is allowed if and only if added only
+		iter = newPreOrderNodeIterator[E, V]( // Remove is allowed if and only if added only
 			false,
 			addedNodesOnly, // added only
 			node.lastPreOrderNode(),
@@ -868,14 +888,14 @@ func (node *binTreeNode) containedFirstNodeIterator(forwardSubNodeOrder, addedNo
 	return &iter
 }
 
-func (node *binTreeNode) configuredNodeIterator(forward, addedOnly bool) nodeIteratorRem {
-	var startNode *binTreeNode
+func (node *binTreeNode[E, V]) configuredNodeIterator(forward, addedOnly bool) nodeIteratorRem[E, V] {
+	var startNode *binTreeNode[E, V]
 	if forward {
 		startNode = node.firstNode()
 	} else {
 		startNode = node.lastNode()
 	}
-	return newNodeIterator(
+	return newNodeIterator[E, V](
 		forward,
 		addedOnly,
 		startNode,
@@ -883,8 +903,8 @@ func (node *binTreeNode) configuredNodeIterator(forward, addedOnly bool) nodeIte
 		node.getChangeTracker())
 }
 
-//https://jrgraphix.net/r/Unicode/2500-257F
-//https://jrgraphix.net/r/Unicode/25A0-25FF
+// https://jrgraphix.net/r/Unicode/2500-257F
+// https://jrgraphix.net/r/Unicode/25A0-25FF
 const (
 	nonAddedNodeCircle = "\u25cb"
 	addedNodeCircle    = "\u25cf"
@@ -895,7 +915,7 @@ const (
 	belowElbows     = "  "
 )
 
-type node interface {
+type node[E Key, V any] interface {
 	getKey() E
 	GetValue() V
 	IsAdded() bool
@@ -903,13 +923,19 @@ type node interface {
 
 // nodeString returns a visual representation of the given node including the key, with an open circle indicating this node is not an added node,
 // a closed circle indicating this node is an added node.
-func nodeString(node node) string {
+func nodeString[E Key, V any](node node[E, V]) string {
 	if node == nil {
 		return nilString()
 	}
 	key := node.getKey()
 	val := node.GetValue()
-	if val == nil {
+	if _, ok := any(val).(EmptyValueType); !ok {
+		//if val == nil {
+		// TODO this is a problem, need a way of identifying a non-associative trie or trie node
+		// Ooh, I have a good idea, just track if we ever called SetValue, is there any other way of assigning a value?
+		// Remap, whatever, as long as we know it has been set
+		// I think the better idea is to use the sentinel value
+
 		if node.IsAdded() {
 			return fmt.Sprint(addedNodeCircle, " ", key)
 		}
@@ -929,14 +955,14 @@ type indents struct {
 //
 // withNonAddedKeys: whether to show nodes that are not added nodes
 // withSizes: whether to include the counts of added nodes in each sub-tree
-func (node *binTreeNode) TreeString(withNonAddedKeys, withSizes bool) string {
+func (node *binTreeNode[E, V]) TreeString(withNonAddedKeys, withSizes bool) string {
 	builder := strings.Builder{}
 	builder.WriteByte('\n')
 	node.printTree(&builder, indents{}, withNonAddedKeys, withSizes)
 	return builder.String()
 }
 
-func (node *binTreeNode) printTree(builder *strings.Builder,
+func (node *binTreeNode[E, V]) printTree(builder *strings.Builder,
 	initialIndents indents,
 	withNonAdded,
 	withSizes bool) {
@@ -1004,14 +1030,14 @@ func nilString() string {
 
 // Returns a visual representation of this node including the key, with an open circle indicating this node is not an added node,
 // a closed circle indicating this node is an added node.
-func (node *binTreeNode) String() string {
+func (node *binTreeNode[E, V]) String() string {
 	if node == nil {
-		return nodeString(nil)
+		return nodeString[E, V](nil)
 	}
-	return nodeString(node)
+	return nodeString[E, V](node)
 }
 
-func (node binTreeNode) format(state fmt.State, verb rune) {
+func (node binTreeNode[E, V]) format(state fmt.State, verb rune) {
 	switch verb {
 	case 's', 'v':
 		_, _ = state.Write([]byte(node.String()))
@@ -1050,7 +1076,7 @@ func flagsFromState(state fmt.State, verb rune) string {
 
 // Clones the node.
 // Keys remain the same, but the parent node and the lower and upper sub-nodes are all set to nil.
-func (node *binTreeNode) clone() *binTreeNode {
+func (node *binTreeNode[E, V]) clone() *binTreeNode[E, V] {
 	if node == nil {
 		return nil
 	}
@@ -1070,7 +1096,7 @@ func (node *binTreeNode) clone() *binTreeNode {
 	return &result
 }
 
-func (node *binTreeNode) cloneTreeNode(cTracker *changeTracker) *binTreeNode {
+func (node *binTreeNode[E, V]) cloneTreeNode(cTracker *changeTracker) *binTreeNode[E, V] {
 	if node == nil {
 		return nil
 	}
@@ -1081,13 +1107,13 @@ func (node *binTreeNode) cloneTreeNode(cTracker *changeTracker) *binTreeNode {
 	return &result
 }
 
-func (node *binTreeNode) cloneTreeTrackerBounds(ctracker *changeTracker, bnds *bounds) *binTreeNode {
+func (node *binTreeNode[E, V]) cloneTreeTrackerBounds(ctracker *changeTracker, bnds *bounds[E]) *binTreeNode[E, V] {
 	if node == nil {
 		return nil
 	}
 	rootClone := node.cloneTreeNode(ctracker)
 	clonedNode := rootClone
-	iterator := clonedNode.containingFirstAllNodeIterator(true).(*subNodeCachingIterator)
+	iterator := clonedNode.containingFirstAllNodeIterator(true).(*subNodeCachingIterator[E, V])
 	recalculateSize := false
 	for {
 		lower := clonedNode.getLowerSubNode()
@@ -1170,12 +1196,12 @@ func (node *binTreeNode) cloneTreeTrackerBounds(ctracker *changeTracker, bnds *b
 	return rootClone
 }
 
-func (node *binTreeNode) cloneTreeBounds(bnds *bounds) *binTreeNode {
+func (node *binTreeNode[E, V]) cloneTreeBounds(bnds *bounds[E]) *binTreeNode[E, V] {
 	return node.cloneTreeTrackerBounds(&changeTracker{}, bnds)
 }
 
 // Clones the sub-tree starting with this node as root.
 // The nodes are cloned, but their keys and values are not cloned.
-func (node *binTreeNode) cloneTree() *binTreeNode {
+func (node *binTreeNode[E, V]) cloneTree() *binTreeNode[E, V] {
 	return node.cloneTreeBounds(nil)
 }

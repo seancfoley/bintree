@@ -22,19 +22,19 @@ import (
 	"unsafe"
 )
 
-type binTree struct {
-	root *binTreeNode
+type binTree[E Key, V any] struct {
+	root *binTreeNode[E, V]
 }
 
 // GetRoot returns the root node of this trie, which can be nil for a zero-valued uninitialized trie, but not for any other trie
-func (tree *binTree) GetRoot() *binTreeNode {
+func (tree *binTree[E, V]) GetRoot() *binTreeNode[E, V] {
 	return tree.root
 }
 
 // Size returns the number of elements in the tree.
 // Only nodes for which IsAdded() returns true are counted.
 // When zero is returned, IsEmpty() returns true.
-func (tree *binTree) Size() int {
+func (tree *binTree[E, V]) Size() int {
 	if tree == nil {
 		return 0
 	}
@@ -42,7 +42,7 @@ func (tree *binTree) Size() int {
 }
 
 // NodeSize returns the number of nodes in the tree, which is always more than the number of elements.
-func (tree *binTree) NodeSize() int {
+func (tree *binTree[E, V]) NodeSize() int {
 	if tree == nil {
 		return 0
 	}
@@ -50,18 +50,18 @@ func (tree *binTree) NodeSize() int {
 }
 
 // Clear removes all added nodes from the tree, after which IsEmpty() will return true
-func (tree *binTree) Clear() {
+func (tree *binTree[E, V]) Clear() {
 	if root := tree.GetRoot(); root != nil {
 		root.Clear()
 	}
 }
 
 // IsEmpty returns true if there are not any added nodes within this tree
-func (tree *binTree) IsEmpty() bool {
+func (tree *binTree[E, V]) IsEmpty() bool {
 	return tree.Size() == 0
 }
 
-func (tree binTree) format(state fmt.State, verb rune) {
+func (tree binTree[E, V]) format(state fmt.State, verb rune) {
 	switch verb {
 	case 's', 'v':
 		_, _ = state.Write([]byte(tree.String()))
@@ -73,6 +73,7 @@ func (tree binTree) format(state fmt.State, verb rune) {
 	// So, in the case of unsupported flags, let's print { rootPointer } where rootPointer is printed according to the flags and verb.
 	s := flagsFromState(state, verb)
 	rootStr := fmt.Sprintf(s, unsafe.Pointer(tree.root))
+	//rootStr := fmt.Sprintf(s, uint64(tree.root))
 	bytes := make([]byte, len(rootStr)+2)
 	bytes[0] = '{'
 	shifted := bytes[1:]
@@ -82,16 +83,16 @@ func (tree binTree) format(state fmt.State, verb rune) {
 }
 
 // String returns a visual representation of the tree with one node per line.
-func (tree *binTree) String() string {
+func (tree *binTree[E, V]) String() string {
 	return tree.TreeString(true)
 }
 
 // TreeString returns a visual representation of the tree with one node per line, with or without the non-added keys.
-func (tree *binTree) TreeString(withNonAddedKeys bool) string {
+func (tree *binTree[E, V]) TreeString(withNonAddedKeys bool) string {
 	return tree.GetRoot().TreeString(withNonAddedKeys, true)
 }
 
-func (tree *binTree) printTree(builder *strings.Builder, inds indents, withNonAddedKeys bool) {
+func (tree *binTree[E, V]) printTree(builder *strings.Builder, inds indents, withNonAddedKeys bool) {
 	if tree == nil {
 		builder.WriteString(inds.nodeIndent)
 		builder.WriteString(nilString())
@@ -104,7 +105,7 @@ func (tree *binTree) printTree(builder *strings.Builder, inds indents, withNonAd
 const treeKeyWildcard = '*'
 
 // Produces a visual representation of the given tries joined by a single root node, with one node per line.
-func treesString(withNonAddedKeys bool, trees ...*binTree) string {
+func treesString[E Key, V any](withNonAddedKeys bool, trees ...*binTree[E, V]) string {
 	totalEntrySize := 0
 	for _, tree := range trees {
 		totalEntrySize += tree.Size()

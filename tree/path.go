@@ -26,27 +26,27 @@ import (
 // Not all nodes in the pathway through the tree need to be included in the linked list.
 //
 // In other words, a path follows a pathway through a tree from root to leaf, but not necessarily including all nodes encountered along the way.
-type Path struct {
-	root, leaf *PathNode
+type Path[E Key, V any] struct {
+	root, leaf *PathNode[E, V]
 }
 
 // GetRoot returns the beginning of the Path, which may or may not match the tree root of the originating tree.
-func (path *Path) GetRoot() *PathNode {
+func (path *Path[E, V]) GetRoot() *PathNode[E, V] {
 	return path.root
 }
 
 // GetLeaf returns the end of the Path, which may or may not match a leaf in the originating tree.
-func (path *Path) GetLeaf() *PathNode {
+func (path *Path[E, V]) GetLeaf() *PathNode[E, V] {
 	return path.leaf
 }
 
 // String returns a visual representation of the Path with one node per line.
-func (path *Path) String() string {
+func (path *Path[E, V]) String() string {
 	return path.ListString(true)
 }
 
 // ListString returns a visual representation of the tree with one node per line, with or without the non-added keys.
-func (path *Path) ListString(withNonAddedKeys bool) string {
+func (path *Path[E, V]) ListString(withNonAddedKeys bool) string {
 	if path.Size() == 0 {
 		builder := strings.Builder{}
 		builder.WriteByte('\n')
@@ -63,7 +63,7 @@ func (path *Path) ListString(withNonAddedKeys bool) string {
 
 // Size returns the count of nodes in the list
 // This is a constant-time operation since the size is maintained in each node.
-func (path *Path) Size() (storedSize int) {
+func (path *Path[E, V]) Size() (storedSize int) {
 	if path == nil || path.root == nil {
 		return 0
 	}
@@ -71,8 +71,8 @@ func (path *Path) Size() (storedSize int) {
 }
 
 // PathNode is an element in the list of a Path
-type PathNode struct {
-	previous, next *PathNode
+type PathNode[E Key, V any] struct {
+	previous, next *PathNode[E, V]
 
 	// the key for the node
 	item E
@@ -87,29 +87,29 @@ type PathNode struct {
 }
 
 // Next returns the next node in the path
-func (node *PathNode) Next() *PathNode {
+func (node *PathNode[E, V]) Next() *PathNode[E, V] {
 	return node.next
 }
 
 // Previous returns the previous node in the path
-func (node *PathNode) Previous() *PathNode {
+func (node *PathNode[E, V]) Previous() *PathNode[E, V] {
 	return node.previous
 }
 
-func (node *PathNode) getKey() (key E) {
+func (node *PathNode[E, V]) getKey() (key E) {
 	if node != nil {
-		key = node.item
+		return node.item
 	}
 	return
 }
 
 // GetKey gets the key used for placing the node in the tree.
-func (node *PathNode) GetKey() E {
+func (node *PathNode[E, V]) GetKey() E {
 	return node.getKey()
 }
 
 // GetValue returns the value assigned to the node
-func (node *PathNode) GetValue() (val V) {
+func (node *PathNode[E, V]) GetValue() (val V) {
 	if node != nil {
 		val = node.value
 	}
@@ -123,13 +123,13 @@ func (node *PathNode) GetValue() (val V) {
 // Only added elements contribute to the size of a tree.
 // When removing nodes, non-added nodes are removed automatically whenever they are no longer needed,
 // which is when an added node has less than two added sub-nodes.
-func (node *PathNode) IsAdded() bool {
+func (node *PathNode[E, V]) IsAdded() bool {
 	return node != nil && node.added
 }
 
 // Size returns the count of nodes added to the sub-tree starting from this node as root and moving downwards to sub-nodes.
 // This is a constant-time operation since the size is maintained in each node.
-func (node *PathNode) Size() (storedSize int) {
+func (node *PathNode[E, V]) Size() (storedSize int) {
 	if node != nil {
 		storedSize = node.storedSize
 		if storedSize == sizeUnknown {
@@ -158,25 +158,25 @@ func (node *PathNode) Size() (storedSize int) {
 
 // Returns a visual representation of this node including the key, with an open circle indicating this node is not an added node,
 // a closed circle indicating this node is an added node.
-func (node *PathNode) String() string {
+func (node *PathNode[E, V]) String() string {
 	if node == nil {
-		return nodeString(nil)
+		return nodeString[E, V](nil)
 	}
-	return nodeString(node)
+	return nodeString[E, V](node)
 }
 
 // ListString returns a visual representation of the sub-list with this node as root, with one node per line.
 //
 // withNonAddedKeys: whether to show nodes that are not added nodes
 // withSizes: whether to include the counts of added nodes in each sub-list
-func (node *PathNode) ListString(withNonAddedKeys, withSizes bool) string {
+func (node *PathNode[E, V]) ListString(withNonAddedKeys, withSizes bool) string {
 	builder := strings.Builder{}
 	builder.WriteByte('\n')
 	node.printList(&builder, indents{}, withNonAddedKeys, withSizes)
 	return builder.String()
 }
 
-func (node *PathNode) printList(builder *strings.Builder,
+func (node *PathNode[E, V]) printList(builder *strings.Builder,
 	indents indents,
 	withNonAdded,
 	withSizes bool) {

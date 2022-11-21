@@ -34,8 +34,8 @@ const (
 	subtreeDelete                   // Remove nodes whose keys are contained by E
 )
 
-type opResult struct {
-	key TrieKey
+type opResult[E TrieKey[E], V any] struct {
+	key E
 
 	// whether near is searching for a floor or ceiling
 	// a floor is greatest element below addr
@@ -72,21 +72,22 @@ type opResult struct {
 	// deletions:
 
 	// this tree was deleted
-	deleted *BinTrieNode
+	deleted *BinTrieNode[E, V]
 
 	// contains:
 
 	// A linked list of the tree elements, from largest to smallest,
 	// that contain the supplied argument, and the end of the list
-	containing, containingEnd *PathNode
+	containing, containingEnd *PathNode[E, V]
 
 	// The tree node with the smallest subnet or address containing the supplied argument
-	smallestContaining *BinTrieNode
+	smallestContaining *BinTrieNode[E, V]
 
 	// adds and puts:
 
 	// new and existing values for add, put and remap operations
-	newValue, existingValue interface{}
+	newValue, existingValue V
+	//newValue, existingValue interface{}
 
 	// this added tree node was newly created for an add
 	inserted,
@@ -95,30 +96,31 @@ type opResult struct {
 	added,
 
 	// this added tree node was already added to the trie
-	addedAlready *BinTrieNode
+	addedAlready *BinTrieNode[E, V]
 
 	// remaps:
 
-	remapper func(V) (V, remapAction)
+	remapper func(val V, exists bool) (V, remapAction)
 }
 
-var emptyPath Path
+//var emptyPath Path
 
-func (result *opResult) getContaining() *Path {
+func (result *opResult[E, V]) getContaining() *Path[E, V] {
 	containing := result.containing
 	if containing == nil {
-		return &emptyPath
+		return &Path[E, V]{}
+		//return &emptyPath
 	}
-	return &Path{
+	return &Path[E, V]{
 		root: containing,
 		leaf: result.containingEnd,
 	}
 }
 
 // add to the list of tree elements that contain the supplied argument
-func (result *opResult) addContaining(containingSub *BinTrieNode) {
+func (result *opResult[E, V]) addContaining(containingSub *BinTrieNode[E, V]) {
 	if containingSub.IsAdded() {
-		node := &PathNode{
+		node := &PathNode[E, V]{
 			item:       containingSub.item,
 			value:      containingSub.value,
 			storedSize: 1,
@@ -139,85 +141,92 @@ func (result *opResult) addContaining(containingSub *BinTrieNode) {
 	}
 }
 
-type TrieKeyIterator interface {
+type TrieKeyIterator[E TrieKey[E]] interface {
 	HasNext
 
-	Next() TrieKey
+	Next() E
 
 	// Remove removes the last iterated element from the underlying trie, and returns that element.
 	// If there is no such element, it returns nil.
-	Remove() TrieKey
+	Remove() E
 }
 
-type trieKeyIterator struct {
-	keyIterator
+type trieKeyIterator[E TrieKey[E]] struct {
+	keyIterator[E]
 }
 
-func (iter trieKeyIterator) Next() TrieKey {
+func (iter trieKeyIterator[E]) Next() E {
 	next := iter.keyIterator.Next()
-	if next == nil {
-		return nil
-	}
-	return next.(TrieKey)
+	return next
+	//if next == nil {
+	//	return nil
+	//}
+	//return next.(TrieKey)
 }
 
-func (iter trieKeyIterator) Remove() TrieKey {
+func (iter trieKeyIterator[E]) Remove() E {
 	removed := iter.keyIterator.Remove()
-	if removed == nil {
-		return nil
-	}
-	return removed.(TrieKey)
+	return removed
+	//if removed == nil {
+	//	return nil
+	//}
+	//return removed.(TrieKey)
 }
 
-type TrieNodeIterator interface {
+type TrieNodeIterator[E TrieKey[E], V any] interface {
 	HasNext
 
-	Next() *BinTrieNode
+	Next() *BinTrieNode[E, V]
 }
 
-type TrieNodeIteratorRem interface {
-	TrieNodeIterator
+type TrieNodeIteratorRem[E TrieKey[E], V any] interface {
+	TrieNodeIterator[E, V]
 
 	// Remove removes the last iterated element from the underlying trie, and returns that element.
 	// If there is no such element, it returns nil.
-	Remove() *BinTrieNode
+	Remove() *BinTrieNode[E, V]
 }
 
-type trieNodeIteratorRem struct {
-	nodeIteratorRem
+type trieNodeIteratorRem[E TrieKey[E], V any] struct {
+	nodeIteratorRem[E, V]
 }
 
-func (iter trieNodeIteratorRem) Next() *BinTrieNode {
-	return iter.nodeIteratorRem.Next().toTrieNode()
+func (iter trieNodeIteratorRem[E, V]) Next() *BinTrieNode[E, V] {
+	return toTrieNode(iter.nodeIteratorRem.Next())
+	//return iter.nodeIteratorRem.Next().toTrieNode()
 }
 
-func (iter trieNodeIteratorRem) Remove() *BinTrieNode {
-	return iter.nodeIteratorRem.Remove().toTrieNode()
+func (iter trieNodeIteratorRem[E, V]) Remove() *BinTrieNode[E, V] {
+	return toTrieNode(iter.nodeIteratorRem.Remove())
+	//return iter.nodeIteratorRem.Remove().toTrieNode()
 }
 
-type trieNodeIterator struct {
-	nodeIterator
+type trieNodeIterator[E TrieKey[E], V any] struct {
+	nodeIterator[E, V]
 }
 
-func (iter trieNodeIterator) Next() *BinTrieNode {
-	return iter.nodeIterator.Next().toTrieNode()
+func (iter trieNodeIterator[E, V]) Next() *BinTrieNode[E, V] {
+	return toTrieNode(iter.nodeIterator.Next())
+	//return iter.nodeIterator.Next().toTrieNode()
 }
 
-type CachingTrieNodeIterator interface {
-	TrieNodeIteratorRem
+type CachingTrieNodeIterator[E TrieKey[E], V any] interface {
+	TrieNodeIteratorRem[E, V]
 	CachingIterator
 }
 
-type cachingTrieNodeIterator struct {
-	cachingNodeIterator // an interface
+type cachingTrieNodeIterator[E TrieKey[E], V any] struct {
+	cachingNodeIterator[E, V] // an interface
 }
 
-func (iter *cachingTrieNodeIterator) Next() *BinTrieNode {
-	return iter.cachingNodeIterator.Next().toTrieNode()
+func (iter *cachingTrieNodeIterator[E, V]) Next() *BinTrieNode[E, V] {
+	return toTrieNode(iter.cachingNodeIterator.Next())
+	//return iter.cachingNodeIterator.Next().toTrieNode()
 }
 
-func (iter *cachingTrieNodeIterator) Remove() *BinTrieNode {
-	return iter.cachingNodeIterator.Remove().toTrieNode()
+func (iter *cachingTrieNodeIterator[E, V]) Remove() *BinTrieNode[E, V] {
+	return toTrieNode(iter.cachingNodeIterator.Remove())
+	//return iter.cachingNodeIterator.Remove().toTrieNode()
 }
 
 // KeyCompareResult has callbacks for a key comparison of a new key with a key pre-existing in the trie.
@@ -250,7 +259,8 @@ type KeyCompareResult interface {
 // A key should never change.
 // For keys with a prefix length, the prefix length must remain constance, and the prefix bits must remain constant.
 // For keys with no prefix length, all the key bits must remain constant.
-type TrieKey interface {
+type TrieKey[E any] interface {
+	comparable
 
 	// MatchBits matches the bits in this key to the bits in the given key, starting from the given bit index.
 	// Only the remaining bits in the prefix can be compared for either key.
@@ -264,7 +274,7 @@ type TrieKey interface {
 	// If the given key has a shorter prefix length, so not all bits in this key can be compared to the given key,
 	// but the bits that can be compared are a match, then that is a partial match.
 	// MatchBits calls neither method in handleMatch and returns false in that case.
-	MatchBits(key TrieKey, bitIndex BitCount, handleMatch KeyCompareResult) bool
+	MatchBits(key E, bitIndex BitCount, handleMatch KeyCompareResult) bool
 
 	// Compare returns a negative integer, zero, or a positive integer if this instance is less than, equal, or greater than the give item.
 	// When comparing, the first mismatched bit determines the result.
@@ -272,7 +282,7 @@ type TrieKey interface {
 	// If those bits are equal, and both have the same prefix length, they are equal.
 	// Otherwise, the next bit in the key with the longer prefix (or no prefix at all) determines the result.
 	// If that bit is 1, that key is larger, if it is 0, then smaller.
-	Compare(TrieKey) int
+	Compare(E) int
 
 	// GetBitCount returns the bit count for the key, which is a fixed value for any and all keys in the trie.
 	GetBitCount() BitCount
@@ -287,7 +297,7 @@ type TrieKey interface {
 	IsOneBit(bitIndex BitCount) bool
 
 	// ToPrefixBlockLen creates a new key with a prefix of the given length
-	ToPrefixBlockLen(prefixLen BitCount) TrieKey
+	ToPrefixBlockLen(prefixLen BitCount) E
 
 	// GetTrailingBitCount returns the number of trailing ones or zeros in the key.
 	// If the key has a prefix length, GetTrailingBitCount is undefined.
@@ -297,40 +307,46 @@ type TrieKey interface {
 	// ToMaxLower returns a new key. If this key has a prefix length, it is converted to a key with a 0 as the first bit following the prefix, followed by all ones to the end, and with the prefix length then removed.
 	// It returns this same key if it has no prefix length.
 	// For instance, if this key is 1010**** with a prefix length of 4, the returned key is 10100111 with no prefix length.
-	ToMaxLower() TrieKey
+	ToMaxLower() E
 
 	// ToMinUpper returns a new key. If this key has a prefix length, it is converted to a key with a 1 as the first bit following the prefix, followed by all zeros to the end, and with the prefix length then removed.
 	// It returns this same key if it has no prefix length.
 	// For instance, if this key is 1010**** with a prefix length of 4, the returned key is 10101000 with no prefix length.
-	ToMinUpper() TrieKey
+	ToMinUpper() E
 }
 
-type BinTrieNode struct {
-	binTreeNode
+type BinTrieNode[E TrieKey[E], V any] struct {
+	binTreeNode[E, V]
 }
 
 // works with nil
-func (node *BinTrieNode) toBinTreeNode() *binTreeNode {
-	return (*binTreeNode)(unsafe.Pointer(node))
+func (node *BinTrieNode[E, V]) toBinTreeNode() *binTreeNode[E, V] {
+	return (*binTreeNode[E, V])(unsafe.Pointer(node))
 }
 
 // setKey sets the key used for placing the node in the tree.
 // when freezeRoot is true, this is never called (and freezeRoot is always true)
-func (node *BinTrieNode) setKey(item TrieKey) {
+func (node *BinTrieNode[E, V]) setKey(item E) {
+	//func (node *BinTrieNode[E, V]) setKey(item TrieKey) {
 	node.binTreeNode.setKey(item)
 }
 
 // GetKey gets the key used for placing the node in the tree.
-func (node *BinTrieNode) GetKey() TrieKey {
-	val := node.toBinTreeNode().getKey()
-	if val == nil {
-		return nil
-	}
-	return val.(TrieKey)
+func (node *BinTrieNode[E, V]) GetKey() E {
+	return node.toBinTreeNode().getKey()
 }
 
+//// GetKey gets the key used for placing the node in the tree.
+//func (node *BinTrieNode[E, V]) GetKey() TrieKey {
+//	val := node.toBinTreeNode().getKey()
+//	if val == nil {
+//		return nil
+//	}
+//	return val.(TrieKey) // TODO xxxx so here we assert that keys satisfy TrieKey xxxx
+//}
+
 // IsRoot returns whether this is the root of the backing tree.
-func (node *BinTrieNode) IsRoot() bool {
+func (node *BinTrieNode[E, V]) IsRoot() bool {
 	return node.toBinTreeNode().IsRoot()
 }
 
@@ -341,31 +357,31 @@ func (node *BinTrieNode) IsRoot() bool {
 // Only added elements contribute to the size of a tree.
 // When removing nodes, non-added nodes are removed automatically whenever they are no longer needed,
 // which is when an added node has less than two added sub-nodes.
-func (node *BinTrieNode) IsAdded() bool {
+func (node *BinTrieNode[E, V]) IsAdded() bool {
 	return node.toBinTreeNode().IsAdded()
 }
 
 // Clear removes this node and all sub-nodes from the tree, after which isEmpty() will return true.
-func (node *BinTrieNode) Clear() {
+func (node *BinTrieNode[E, V]) Clear() {
 	node.toBinTreeNode().Clear()
 }
 
 // IsEmpty returns where there are not any elements in the sub-tree with this node as the root.
-func (node *BinTrieNode) IsEmpty() bool {
+func (node *BinTrieNode[E, V]) IsEmpty() bool {
 	return node.toBinTreeNode().IsEmpty()
 }
 
 // IsLeaf returns whether this node is in the tree (a node for which IsAdded() is true)
 // and there are no elements in the sub-tree with this node as the root.
-func (node *BinTrieNode) IsLeaf() bool {
+func (node *BinTrieNode[E, V]) IsLeaf() bool {
 	return node.toBinTreeNode().IsLeaf()
 }
 
-func (node *BinTrieNode) GetValue() (val V) {
+func (node *BinTrieNode[E, V]) GetValue() (val V) {
 	return node.toBinTreeNode().GetValue()
 }
 
-func (node *BinTrieNode) ClearValue() {
+func (node *BinTrieNode[E, V]) ClearValue() {
 	node.toBinTreeNode().ClearValue()
 }
 
@@ -374,19 +390,19 @@ func (node *BinTrieNode) ClearValue() {
 // If it has two sub-nodes, it cannot be removed from the tree, in which case it is marked as not "added",
 // nor is it counted in the tree size.
 // Only added nodes can be removed from the tree.  If this node is not added, this method does nothing.
-func (node *BinTrieNode) Remove() {
+func (node *BinTrieNode[E, V]) Remove() {
 	node.toBinTreeNode().Remove()
 }
 
 // NodeSize returns the count of all nodes in the tree starting from this node and extending to all sub-nodes.
 // Unlike for the Size method, this is not a constant-time operation and must visit all sub-nodes of this node.
-func (node *BinTrieNode) NodeSize() int {
+func (node *BinTrieNode[E, V]) NodeSize() int {
 	return node.toBinTreeNode().NodeSize()
 }
 
 // Size returns the count of nodes added to the sub-tree starting from this node as root and moving downwards to sub-nodes.
 // This is a constant-time operation since the size is maintained in each node and adjusted with each add and Remove operation in the sub-tree.
-func (node *BinTrieNode) Size() int {
+func (node *BinTrieNode[E, V]) Size() int {
 	return node.toBinTreeNode().Size()
 }
 
@@ -394,46 +410,49 @@ func (node *BinTrieNode) Size() int {
 //
 // withNonAddedKeys: whether to show nodes that are not added nodes
 // withSizes: whether to include the counts of added nodes in each sub-tree
-func (node *BinTrieNode) TreeString(withNonAddedKeys, withSizes bool) string {
+func (node *BinTrieNode[E, V]) TreeString(withNonAddedKeys, withSizes bool) string {
 	return node.toBinTreeNode().TreeString(withNonAddedKeys, withSizes)
 }
 
 // Returns a visual representation of this node including the key, with an open circle indicating this node is not an added node,
 // a closed circle indicating this node is an added node.
-func (node *BinTrieNode) String() string {
+func (node *BinTrieNode[E, V]) String() string {
 	return node.toBinTreeNode().String()
 }
 
-func (node *BinTrieNode) setUpper(upper *BinTrieNode) {
+func (node *BinTrieNode[E, V]) setUpper(upper *BinTrieNode[E, V]) {
 	node.binTreeNode.setUpper(&upper.binTreeNode)
 }
 
-func (node *BinTrieNode) setLower(lower *BinTrieNode) {
+func (node *BinTrieNode[E, V]) setLower(lower *BinTrieNode[E, V]) {
 	node.binTreeNode.setLower(&lower.binTreeNode)
 }
 
 // GetUpperSubNode gets the direct child node whose key is largest in value
-func (node *BinTrieNode) GetUpperSubNode() *BinTrieNode {
-	return node.toBinTreeNode().getUpperSubNode().toTrieNode()
+func (node *BinTrieNode[E, V]) GetUpperSubNode() *BinTrieNode[E, V] {
+	return toTrieNode(node.toBinTreeNode().getUpperSubNode())
+	//return node.toBinTreeNode().getUpperSubNode().toTrieNode()
 }
 
 // GetLowerSubNode gets the direct child node whose key is smallest in value
-func (node *BinTrieNode) GetLowerSubNode() *BinTrieNode {
-	return node.toBinTreeNode().getLowerSubNode().toTrieNode()
+func (node *BinTrieNode[E, V]) GetLowerSubNode() *BinTrieNode[E, V] {
+	return toTrieNode(node.toBinTreeNode().getLowerSubNode())
+	//return node.toBinTreeNode().getLowerSubNode().toTrieNode()
 }
 
 // GetParent gets the node from which this node is a direct child node, or nil if this is the root.
-func (node *BinTrieNode) GetParent() *BinTrieNode {
-	return node.toBinTreeNode().getParent().toTrieNode()
+func (node *BinTrieNode[E, V]) GetParent() *BinTrieNode[E, V] {
+	return toTrieNode(node.toBinTreeNode().getParent())
+	//return node.toBinTreeNode().getParent().toTrieNode()
 }
 
-func (node *BinTrieNode) Contains(addr TrieKey) bool {
+func (node *BinTrieNode[E, V]) Contains(addr E) bool {
 	result := node.doLookup(addr)
 	return result.exists
 }
 
-func (node *BinTrieNode) RemoveNode(key TrieKey) bool {
-	result := &opResult{
+func (node *BinTrieNode[E, V]) RemoveNode(key E) bool {
+	result := &opResult[E, V]{
 		key: key,
 		op:  insertedDelete,
 	}
@@ -448,7 +467,7 @@ func (node *BinTrieNode) RemoveNode(key TrieKey) bool {
 //
 // It returns any node, whether added or not,
 // including any prefix block node that was not added.
-func (node *BinTrieNode) GetNode(key TrieKey) *BinTrieNode {
+func (node *BinTrieNode[E, V]) GetNode(key E) *BinTrieNode[E, V] {
 	result := node.doLookup(key)
 	return result.existingNode
 }
@@ -457,15 +476,15 @@ func (node *BinTrieNode) GetNode(key TrieKey) *BinTrieNode {
 //
 // Use Contains to check for the existence of a given address in the trie,
 // as well as GetNode to search for all nodes including those not-added but also auto-generated nodes for subnet blocks.
-func (node *BinTrieNode) GetAddedNode(key TrieKey) *BinTrieNode {
+func (node *BinTrieNode[E, V]) GetAddedNode(key E) *BinTrieNode[E, V] {
 	if res := node.GetNode(key); res == nil || res.IsAdded() {
 		return res
 	}
 	return nil
 }
 
-func (node *BinTrieNode) Get(key TrieKey) V {
-	result := &opResult{
+func (node *BinTrieNode[E, V]) Get(key E) (V, bool) {
+	result := &opResult[E, V]{
 		key: key,
 		op:  lookup,
 	}
@@ -474,13 +493,14 @@ func (node *BinTrieNode) Get(key TrieKey) V {
 	}
 	resultNode := result.existingNode
 	if resultNode == nil {
-		return nil
+		var v V
+		return v, false
 	}
-	return resultNode.GetValue()
+	return resultNode.GetValue(), true
 }
 
-func (node *BinTrieNode) RemoveElementsContainedBy(key TrieKey) *BinTrieNode {
-	result := &opResult{
+func (node *BinTrieNode[E, V]) RemoveElementsContainedBy(key E) *BinTrieNode[E, V] {
+	result := &opResult[E, V]{
 		key: key,
 		op:  subtreeDelete,
 	}
@@ -490,15 +510,15 @@ func (node *BinTrieNode) RemoveElementsContainedBy(key TrieKey) *BinTrieNode {
 	return result.deleted
 }
 
-func (node *BinTrieNode) ElementsContainedBy(key TrieKey) *BinTrieNode {
+func (node *BinTrieNode[E, V]) ElementsContainedBy(key E) *BinTrieNode[E, V] {
 	result := node.doLookup(key)
 	return result.containedBy
 }
 
 // ElementsContaining finds the trie nodes containing the given key and returns them as a linked list
 // only added nodes are added to the linked list
-func (node *BinTrieNode) ElementsContaining(key TrieKey) *Path {
-	result := &opResult{
+func (node *BinTrieNode[E, V]) ElementsContaining(key E) *Path[E, V] {
+	result := &opResult[E, V]{
 		key: key,
 		op:  containing,
 	}
@@ -509,26 +529,28 @@ func (node *BinTrieNode) ElementsContaining(key TrieKey) *Path {
 }
 
 // LongestPrefixMatch finds the longest matching prefix amongst keys added to the trie
-func (node *BinTrieNode) LongestPrefixMatch(key TrieKey) TrieKey {
+func (node *BinTrieNode[E, V]) LongestPrefixMatch(key E) (E, bool) {
 	res := node.LongestPrefixMatchNode(key)
 	if res == nil {
-		return nil
+		var e E
+		return e, false
 	}
-	return res.GetKey()
+	return res.GetKey(), true
 }
 
 // LongestPrefixMatchNode finds the node with the longest matching prefix
 // only added nodes are added to the linked list
-func (node *BinTrieNode) LongestPrefixMatchNode(key TrieKey) *BinTrieNode {
+func (node *BinTrieNode[E, V]) LongestPrefixMatchNode(key E) *BinTrieNode[E, V] {
 	return node.doLookup(key).smallestContaining
 }
 
-func (node *BinTrieNode) ElementContains(key TrieKey) bool {
-	return node.LongestPrefixMatch(key) != nil
+func (node *BinTrieNode[E, V]) ElementContains(key E) bool {
+	_, ok := node.LongestPrefixMatch(key)
+	return ok
 }
 
-func (node *BinTrieNode) doLookup(key TrieKey) *opResult {
-	result := &opResult{
+func (node *BinTrieNode[E, V]) doLookup(key E) *opResult[E, V] {
+	result := &opResult[E, V]{
 		key: key,
 		op:  lookup,
 	}
@@ -538,23 +560,25 @@ func (node *BinTrieNode) doLookup(key TrieKey) *opResult {
 	return result
 }
 
-func (node *BinTrieNode) removeSubtree(result *opResult) {
-	result.deleted = node.toTrieNode()
+func (node *BinTrieNode[E, V]) removeSubtree(result *opResult[E, V]) {
+	result.deleted = node
+	//result.deleted = node.toTrieNode()
 	node.Clear()
 }
 
-func (node *BinTrieNode) removeOp(result *opResult) {
-	result.deleted = node.toTrieNode()
+func (node *BinTrieNode[E, V]) removeOp(result *opResult[E, V]) {
+	result.deleted = node
+	//result.deleted = node.toTrieNode()
 	node.binTreeNode.Remove()
 }
 
-func (node *BinTrieNode) matchBits(result *opResult) {
+func (node *BinTrieNode[E, V]) matchBits(result *opResult[E, V]) {
 	node.matchBitsFromIndex(0, result)
 }
 
 // traverses the tree, matching bits with prefix block nodes, until we can match no longer,
 // at which point it completes the operation, whatever that operation is
-func (node *BinTrieNode) matchBitsFromIndex(bitIndex int, result *opResult) {
+func (node *BinTrieNode[E, V]) matchBitsFromIndex(bitIndex int, result *opResult[E, V]) {
 	matchNode := node
 	for {
 		//fmt.Printf("matching %v to %v\n", result.key, node)
@@ -578,12 +602,12 @@ func (node *BinTrieNode) matchBitsFromIndex(bitIndex int, result *opResult) {
 	}
 }
 
-func (node *BinTrieNode) matchNodeBits(bitIndex int, result *opResult) BitCount {
+func (node *BinTrieNode[E, V]) matchNodeBits(bitIndex int, result *opResult[E, V]) BitCount {
 	existingKey := node.GetKey()
 	newKey := result.key
 	if newKey.GetBitCount() != existingKey.GetBitCount() {
 		panic("mismatched bit length between trie keys")
-	} else if !newKey.MatchBits(existingKey, bitIndex, nodeCompare{node: node, result: result}) {
+	} else if !newKey.MatchBits(existingKey, bitIndex, nodeCompare[E, V]{node: node, result: result}) {
 		if node.IsAdded() {
 			node.handleContains(result)
 		}
@@ -592,15 +616,16 @@ func (node *BinTrieNode) matchNodeBits(bitIndex int, result *opResult) BitCount 
 	return -1
 }
 
-type nodeCompare struct {
-	result *opResult
-	node   *BinTrieNode
+type nodeCompare[E TrieKey[E], V any] struct {
+	result *opResult[E, V]
+	node   *BinTrieNode[E, V]
 }
 
-func (comp nodeCompare) BitsMatch() {
+func (comp nodeCompare[E, V]) BitsMatch() {
 	node := comp.node
 	result := comp.result
-	result.containedBy = node.toTrieNode()
+	result.containedBy = node
+	//result.containedBy = node.toTrieNode()
 	existingKey := node.GetKey()
 	existingPref := existingKey.GetPrefixLen()
 	newKey := result.key
@@ -633,11 +658,11 @@ func (comp nodeCompare) BitsMatch() {
 	}
 }
 
-func (comp nodeCompare) BitsDoNotMatch(matchedBits BitCount) {
+func (comp nodeCompare[E, V]) BitsDoNotMatch(matchedBits BitCount) {
 	comp.node.handleSplitNode(comp.result, matchedBits)
 }
 
-func (node *BinTrieNode) handleContained(result *opResult, newPref int) {
+func (node *BinTrieNode[E, V]) handleContained(result *opResult[E, V], newPref int) {
 	op := result.op
 	if op == insert {
 		// if we have 1.2.3.4 and 1.2.3.4/32, and we are looking at the last segment,
@@ -653,7 +678,7 @@ func (node *BinTrieNode) handleContained(result *opResult, newPref int) {
 	}
 }
 
-func (node *BinTrieNode) handleContains(result *opResult) bool {
+func (node *BinTrieNode[E, V]) handleContains(result *opResult[E, V]) bool {
 	result.smallestContaining = node
 	if result.op == containing {
 		result.addContaining(node)
@@ -662,7 +687,7 @@ func (node *BinTrieNode) handleContains(result *opResult) bool {
 	return false
 }
 
-func (node *BinTrieNode) handleSplitNode(result *opResult, totalMatchingBits BitCount) {
+func (node *BinTrieNode[E, V]) handleSplitNode(result *opResult[E, V], totalMatchingBits BitCount) {
 	op := result.op
 	if op == insert {
 		node.split(result, totalMatchingBits, node.createNew(result.key))
@@ -675,10 +700,11 @@ func (node *BinTrieNode) handleSplitNode(result *opResult, totalMatchingBits Bit
 
 // a node exists for the given key but the node is not added,
 // so not a match, but a split not required
-func (node *BinTrieNode) handleNodeMatch(result *opResult) {
+func (node *BinTrieNode[E, V]) handleNodeMatch(result *opResult[E, V]) {
 	op := result.op
 	if op == lookup {
-		result.existingNode = node.toTrieNode()
+		result.existingNode = node
+		//	result.existingNode = node.toTrieNode()
 	} else if op == insert {
 		node.existingAdded(result)
 	} else if op == subtreeDelete {
@@ -690,7 +716,7 @@ func (node *BinTrieNode) handleNodeMatch(result *opResult) {
 	}
 }
 
-func (node *BinTrieNode) handleMatch(result *opResult) {
+func (node *BinTrieNode[E, V]) handleMatch(result *opResult[E, V]) {
 	result.exists = true
 	if !node.handleContains(result) {
 		op := result.op
@@ -714,33 +740,34 @@ func (node *BinTrieNode) handleMatch(result *opResult) {
 	}
 }
 
-func (node *BinTrieNode) remapNonExistingReplace(result *opResult, totalMatchingBits BitCount) {
+func (node *BinTrieNode[E, V]) remapNonExistingReplace(result *opResult[E, V], totalMatchingBits BitCount) {
 	if node.remap(result, false) {
 		node.replace(result, totalMatchingBits)
 	}
 }
 
-func (node *BinTrieNode) remapNonExistingSplit(result *opResult, totalMatchingBits BitCount) {
+func (node *BinTrieNode[E, V]) remapNonExistingSplit(result *opResult[E, V], totalMatchingBits BitCount) {
 	if node.remap(result, false) {
 		node.split(result, totalMatchingBits, node.createNew(result.key))
 	}
 }
 
-func (node *BinTrieNode) remapNonExisting(result *opResult) *BinTrieNode {
+func (node *BinTrieNode[E, V]) remapNonExisting(result *opResult[E, V]) *BinTrieNode[E, V] {
 	if node.remap(result, false) {
 		return node.createNew(result.key)
 	}
 	return nil
 }
 
-func (node *BinTrieNode) remapNonAdded(result *opResult) {
+func (node *BinTrieNode[E, V]) remapNonAdded(result *opResult[E, V]) {
 	if node.remap(result, false) {
 		node.existingAdded(result)
 	}
 }
 
-func (node *BinTrieNode) remapMatch(result *opResult) {
-	result.existingNode = node.toTrieNode()
+func (node *BinTrieNode[E, V]) remapMatch(result *opResult[E, V]) {
+	result.existingNode = node
+	//result.existingNode = node.toTrieNode()
 	if node.remap(result, true) {
 		node.matchedInserted(result)
 	}
@@ -757,7 +784,7 @@ const (
 // Remaps the value for a node to a new value.
 // This operation works on mapped values
 // It returns true if a new node needs to be created (match is nil) or added (match is non-nil)
-func (node *BinTrieNode) remap(result *opResult, isMatch bool) bool {
+func (node *BinTrieNode[E, V]) remap(result *opResult[E, V], isMatch bool) bool {
 	remapper := result.remapper
 	change := node.cTracker.getCurrent()
 	var existingValue V
@@ -765,12 +792,11 @@ func (node *BinTrieNode) remap(result *opResult, isMatch bool) bool {
 		existingValue = node.GetValue()
 	}
 	result.existingValue = existingValue
-	newValue, action := remapper(existingValue)
+	newValue, action := remapper(existingValue, isMatch)
 	if action == doNothing {
 		return false
 	} else if action == removeNode {
 		if isMatch {
-			//node.cTracker.changedSince(change)xxx
 			cTracker := node.cTracker
 			if cTracker != nil && cTracker.changedSince(change) {
 				panic("the tree has been modified by the remap")
@@ -779,32 +805,41 @@ func (node *BinTrieNode) remap(result *opResult, isMatch bool) bool {
 			node.removeOp(result)
 		}
 		return false
-	} else if isMatch {
-		// functions, maps and slices are not comparable, so here we do not compare values to determine if new one is different
-		//node.cTracker.changedSince(change)xxx
+	} else { // action is remapValue
 		cTracker := node.cTracker
 		if cTracker != nil && cTracker.changedSince(change) {
 			panic("the tree has been modified by the remap")
 		}
 		result.newValue = newValue
 		return true
-	} else {
-		result.newValue = newValue
-		return true
+		//if isMatch { TODO seemed wrong, in the case of match the value changes, else a new node is created, I don't think we can ignore the changed trie if inserting a new node
+		// TODO in fact possible backwards, if isMatch then no new node needs creating.  So safer to modify the trie.  But even then, what if the node is no longer in the trie?
+		//	cTracker := node.cTracker
+		//	if cTracker != nil && cTracker.changedSince(change) {
+		//		panic("the tree has been modified by the remap")
+		//	}
+		//	result.newValue = newValue
+		//	return true
+		//} else {
+		//	result.newValue = newValue
+		//	return true
+		//}
 	}
 }
 
 // this node matched when doing a lookup
-func (node *BinTrieNode) matched(result *opResult) {
-	thisNode := node.toTrieNode()
+func (node *BinTrieNode[E, V]) matched(result *opResult[E, V]) {
+	//thisNode := node.toTrieNode()
+	thisNode := node
 	result.existingNode = thisNode
 	result.nearestNode = thisNode
 }
 
 // similar to matched, but when inserting we see it already there.
 // this added node had already been added before
-func (node *BinTrieNode) matchedInserted(result *opResult) {
-	thisNode := node.toTrieNode()
+func (node *BinTrieNode[E, V]) matchedInserted(result *opResult[E, V]) {
+	//thisNode := node.toTrieNode()
+	thisNode := node
 	result.existingNode = thisNode
 	result.addedAlready = thisNode
 	result.existingValue = node.GetValue()
@@ -812,19 +847,22 @@ func (node *BinTrieNode) matchedInserted(result *opResult) {
 }
 
 // this node previously existed but was not added til now
-func (node *BinTrieNode) existingAdded(result *opResult) {
-	result.existingNode = node.toTrieNode()
-	result.added = node.toTrieNode()
+func (node *BinTrieNode[E, V]) existingAdded(result *opResult[E, V]) {
+	result.existingNode = node
+	result.added = node
+	//result.existingNode = node.toTrieNode()
+	//result.added = node.toTrieNode()
 	node.added(result)
 }
 
 // this node is newly inserted and added
-func (node *BinTrieNode) inserted(result *opResult) {
-	result.inserted = node.toTrieNode()
+func (node *BinTrieNode[E, V]) inserted(result *opResult[E, V]) {
+	result.inserted = node
+	//result.inserted = node.toTrieNode()
 	node.added(result)
 }
 
-func (node *BinTrieNode) added(result *opResult) {
+func (node *BinTrieNode[E, V]) added(result *opResult[E, V]) {
 	node.setNodeAdded(true)
 	node.adjustCount(1)
 	node.SetValue(result.newValue)
@@ -832,39 +870,45 @@ func (node *BinTrieNode) added(result *opResult) {
 }
 
 // The current node and the new node both become sub-nodes of a new block node taking the position of the current node.
-func (node *BinTrieNode) split(result *opResult, totalMatchingBits BitCount, newSubNode *BinTrieNode) {
+func (node *BinTrieNode[E, V]) split(result *opResult[E, V], totalMatchingBits BitCount, newSubNode *BinTrieNode[E, V]) {
 	newBlock := node.GetKey().ToPrefixBlockLen(totalMatchingBits)
 	node.replaceToSub(newBlock, totalMatchingBits, newSubNode)
 	newSubNode.inserted(result)
 }
 
 // The current node is replaced by the new node and becomes a sub-node of the new node.
-func (node *BinTrieNode) replace(result *opResult, totalMatchingBits BitCount) {
-	result.containedBy = node.toTrieNode()
+func (node *BinTrieNode[E, V]) replace(result *opResult[E, V], totalMatchingBits BitCount) {
+	//result.containedBy = node.toTrieNode()
+	result.containedBy = node
 	newNode := node.replaceToSub(result.key, totalMatchingBits, nil)
 	newNode.inserted(result)
 }
 
 // The current node is replaced by a new block of the given key.
 // The current node and given node become sub-nodes.
-func (node *BinTrieNode) replaceToSub(newAssignedKey TrieKey, totalMatchingBits BitCount, newSubNode *BinTrieNode) *BinTrieNode {
+func (node *BinTrieNode[E, V]) replaceToSub(newAssignedKey E, totalMatchingBits BitCount, newSubNode *BinTrieNode[E, V]) *BinTrieNode[E, V] {
 	newNode := node.createNew(newAssignedKey)
 	newNode.storedSize = node.storedSize
 	parent := node.GetParent()
-	if parent.GetUpperSubNode() == node.toTrieNode() {
+	if parent.GetUpperSubNode() == node {
+		//if parent.GetUpperSubNode() == node.toTrieNode() {
 		parent.setUpper(newNode)
-	} else if parent.GetLowerSubNode() == node.toTrieNode() {
+	} else if parent.GetLowerSubNode() == node {
+		//} else if parent.GetLowerSubNode() == node.toTrieNode() {
 		parent.setLower(newNode)
 	}
+
 	existingKey := node.GetKey()
 	if totalMatchingBits < existingKey.GetBitCount() &&
 		existingKey.IsOneBit(totalMatchingBits) {
 		if newSubNode != nil {
 			newNode.setLower(newSubNode)
 		}
-		newNode.setUpper(node.toTrieNode())
+		//newNode.setUpper(node.toTrieNode())
+		newNode.setUpper(node)
 	} else {
-		newNode.setLower(node.toTrieNode())
+		//newNode.setLower(node.toTrieNode())
+		newNode.setLower(node)
 		if newSubNode != nil {
 			newNode.setUpper(newSubNode)
 		}
@@ -873,7 +917,7 @@ func (node *BinTrieNode) replaceToSub(newAssignedKey TrieKey, totalMatchingBits 
 }
 
 // only called when lower/higher and not floor/ceiling since for a match ends things for the latter
-func (node *BinTrieNode) findNearestFromMatch(result *opResult) {
+func (node *BinTrieNode[E, V]) findNearestFromMatch(result *opResult[E, V]) {
 	if result.nearestFloor {
 		// looking for greatest element < queried address
 		// since we have matched the address, we must go lower again,
@@ -881,9 +925,10 @@ func (node *BinTrieNode) findNearestFromMatch(result *opResult) {
 		lower := node.GetLowerSubNode()
 		if lower == nil {
 			// no nearest node yet
-			result.backtrackNode = node.toTrieNode()
+			result.backtrackNode = node
+			//result.backtrackNode = node.toTrieNode()
 		} else {
-			var last *BinTrieNode
+			var last *BinTrieNode[E, V]
 			for {
 				last = lower
 				lower = lower.GetUpperSubNode()
@@ -898,9 +943,10 @@ func (node *BinTrieNode) findNearestFromMatch(result *opResult) {
 		upper := node.GetUpperSubNode()
 		if upper == nil {
 			// no nearest node yet
-			result.backtrackNode = node.toTrieNode()
+			result.backtrackNode = node
+			//result.backtrackNode = node.toTrieNode()
 		} else {
-			var last *BinTrieNode
+			var last *BinTrieNode[E, V]
 			for {
 				last = upper
 				upper = upper.GetLowerSubNode()
@@ -913,18 +959,20 @@ func (node *BinTrieNode) findNearestFromMatch(result *opResult) {
 	}
 }
 
-func (node *BinTrieNode) findNearest(result *opResult, differingBitIndex BitCount) {
+func (node *BinTrieNode[E, V]) findNearest(result *opResult[E, V], differingBitIndex BitCount) {
 	thisKey := node.GetKey()
 	if differingBitIndex < thisKey.GetBitCount() && thisKey.IsOneBit(differingBitIndex) {
 		// this element and all below are > than the query address
 		if result.nearestFloor {
 			// looking for greatest element < or <= queried address, so no need to go further
 			// need to backtrack and find the last right turn to find node < than the query address again
-			result.backtrackNode = node.toTrieNode()
+			result.backtrackNode = node
+			//result.backtrackNode = node.toTrieNode()
 		} else {
 			// looking for smallest element > or >= queried address
-			lower := node.toTrieNode()
-			var last *BinTrieNode
+			lower := node
+			//lower := node.toTrieNode()
+			var last *BinTrieNode[E, V]
 			for {
 				last = lower
 				lower = lower.GetLowerSubNode()
@@ -938,8 +986,9 @@ func (node *BinTrieNode) findNearest(result *opResult, differingBitIndex BitCoun
 		// this element and all below are < than the query address
 		if result.nearestFloor {
 			// looking for greatest element < or <= queried address
-			upper := node.toTrieNode()
-			var last *BinTrieNode
+			upper := node
+			//upper := node.toTrieNode()
+			var last *BinTrieNode[E, V]
 			for {
 				last = upper
 				upper = upper.GetUpperSubNode()
@@ -951,12 +1000,13 @@ func (node *BinTrieNode) findNearest(result *opResult, differingBitIndex BitCoun
 		} else {
 			// looking for smallest element > or >= queried address, so no need to go further
 			// need to backtrack and find the last left turn to find node > than the query address again
-			result.backtrackNode = node.toTrieNode()
+			result.backtrackNode = node
+			//result.backtrackNode = node.toTrieNode()
 		}
 	}
 }
 
-func (node *BinTrieNode) matchSubNode(bitIndex BitCount, result *opResult) *BinTrieNode {
+func (node *BinTrieNode[E, V]) matchSubNode(bitIndex BitCount, result *opResult[E, V]) *BinTrieNode[E, V] {
 	newKey := result.key
 	if !freezeRoot && node.IsEmpty() {
 		if result.op == remap {
@@ -984,7 +1034,8 @@ func (node *BinTrieNode) matchSubNode(bitIndex BitCount, result *opResult) *BinT
 					// But there is one exception, when we are the non-added root node.
 					// So must check for added here.
 					if node.IsAdded() {
-						result.nearestNode = node.toTrieNode()
+						result.nearestNode = node
+						//result.nearestNode = node.toTrieNode()
 					} else {
 						// check if our lower sub-node is there and added.  It is underneath addr too.
 						// find the highest node in that direction.
@@ -1000,7 +1051,8 @@ func (node *BinTrieNode) matchSubNode(bitIndex BitCount, result *opResult) *BinT
 						}
 					}
 				} else {
-					result.backtrackNode = node.toTrieNode()
+					//result.backtrackNode = node.toTrieNode()
+					result.backtrackNode = node
 				}
 			} else if op == remap {
 				upper = node.remapNonExisting(result)
@@ -1024,13 +1076,15 @@ func (node *BinTrieNode) matchSubNode(bitIndex BitCount, result *opResult) *BinT
 				lower.inserted(result)
 			} else if op == near {
 				if result.nearestFloor {
-					result.backtrackNode = node.toTrieNode()
+					//result.backtrackNode = node.toTrieNode()
+					result.backtrackNode = node
 				} else {
 					// With only one sub-node at most, normally that would mean this node must be added.
 					// But there is one exception, when we are the non-added root node.
 					// So must check for added here.
 					if node.IsAdded() {
-						result.nearestNode = node.toTrieNode()
+						//result.nearestNode = node.toTrieNode()
+						result.nearestNode = node
 					} else {
 						// check if our upper sub-node is there and added.  It is above addr too.
 						// find the highest node in that direction.
@@ -1060,9 +1114,9 @@ func (node *BinTrieNode) matchSubNode(bitIndex BitCount, result *opResult) *BinT
 	return nil
 }
 
-func (node *BinTrieNode) createNew(newKey TrieKey) *BinTrieNode {
-	res := &BinTrieNode{
-		binTreeNode{
+func (node *BinTrieNode[E, V]) createNew(newKey E) *BinTrieNode[E, V] {
+	res := &BinTrieNode[E, V]{
+		binTreeNode[E, V]{
 			item:     newKey,
 			cTracker: node.cTracker,
 		},
@@ -1073,44 +1127,52 @@ func (node *BinTrieNode) createNew(newKey TrieKey) *BinTrieNode {
 
 // PreviousAddedNode returns the previous node in the tree that is an added node, following the tree order in reverse,
 // or nil if there is no such node.
-func (node *BinTrieNode) PreviousAddedNode() *BinTrieNode {
-	return node.toBinTreeNode().previousAddedNode().toTrieNode()
+func (node *BinTrieNode[E, V]) PreviousAddedNode() *BinTrieNode[E, V] {
+	//return node.toBinTreeNode().previousAddedNode().toTrieNode()
+	return toTrieNode(node.toBinTreeNode().previousAddedNode())
 }
 
 // NextAddedNode returns the next node in the tree that is an added node, following the tree order,
 // or nil if there is no such node.
-func (node *BinTrieNode) NextAddedNode() *BinTrieNode {
-	return node.toBinTreeNode().nextAddedNode().toTrieNode()
+func (node *BinTrieNode[E, V]) NextAddedNode() *BinTrieNode[E, V] {
+	//return node.toBinTreeNode().nextAddedNode().toTrieNode()
+	return toTrieNode(node.toBinTreeNode().nextAddedNode())
 }
 
 // NextNode returns the node that follows this node following the tree order
-func (node *BinTrieNode) NextNode() *BinTrieNode {
-	return node.toBinTreeNode().nextNode().toTrieNode()
+func (node *BinTrieNode[E, V]) NextNode() *BinTrieNode[E, V] {
+	//return node.toBinTreeNode().nextNode().toTrieNode()
+	return toTrieNode(node.toBinTreeNode().nextNode())
 }
 
 // PreviousNode returns the node that precedes this node following the tree order.
-func (node *BinTrieNode) PreviousNode() *BinTrieNode {
-	return node.toBinTreeNode().previousNode().toTrieNode()
+func (node *BinTrieNode[E, V]) PreviousNode() *BinTrieNode[E, V] {
+	//return node.toBinTreeNode().previousNode().toTrieNode()
+	return toTrieNode(node.toBinTreeNode().previousNode())
 }
 
-func (node *BinTrieNode) FirstNode() *BinTrieNode {
-	return node.toBinTreeNode().firstNode().toTrieNode()
+func (node *BinTrieNode[E, V]) FirstNode() *BinTrieNode[E, V] {
+	//return node.toBinTreeNode().firstNode().toTrieNode()
+	return toTrieNode(node.toBinTreeNode().firstNode())
 }
 
-func (node *BinTrieNode) FirstAddedNode() *BinTrieNode {
-	return node.toBinTreeNode().firstAddedNode().toTrieNode()
+func (node *BinTrieNode[E, V]) FirstAddedNode() *BinTrieNode[E, V] {
+	//return node.toBinTreeNode().firstAddedNode().toTrieNode()
+	return toTrieNode(node.toBinTreeNode().firstAddedNode())
 }
 
-func (node *BinTrieNode) LastNode() *BinTrieNode {
-	return node.toBinTreeNode().lastNode().toTrieNode()
+func (node *BinTrieNode[E, V]) LastNode() *BinTrieNode[E, V] {
+	//return node.toBinTreeNode().lastNode().toTrieNode()
+	return toTrieNode(node.toBinTreeNode().lastNode())
 }
 
-func (node *BinTrieNode) LastAddedNode() *BinTrieNode {
-	return node.toBinTreeNode().lastAddedNode().toTrieNode()
+func (node *BinTrieNode[E, V]) LastAddedNode() *BinTrieNode[E, V] {
+	//return node.toBinTreeNode().lastAddedNode().toTrieNode()
+	return toTrieNode(node.toBinTreeNode().lastAddedNode())
 }
 
-func (node *BinTrieNode) findNodeNear(key TrieKey, below, exclusive bool) *BinTrieNode {
-	result := &opResult{
+func (node *BinTrieNode[E, V]) findNodeNear(key E, below, exclusive bool) *BinTrieNode[E, V] {
+	result := &opResult[E, V]{
 		key:           key,
 		op:            near,
 		nearestFloor:  below,
@@ -1152,49 +1214,49 @@ func (node *BinTrieNode) findNodeNear(key TrieKey, below, exclusive bool) *BinTr
 	return result.nearestNode
 }
 
-func (node *BinTrieNode) LowerAddedNode(key TrieKey) *BinTrieNode {
+func (node *BinTrieNode[E, V]) LowerAddedNode(key E) *BinTrieNode[E, V] {
 	return node.findNodeNear(key, true, true)
 }
 
-func (node *BinTrieNode) FloorAddedNode(key TrieKey) *BinTrieNode {
+func (node *BinTrieNode[E, V]) FloorAddedNode(key E) *BinTrieNode[E, V] {
 	return node.findNodeNear(key, true, false)
 }
 
-func (node *BinTrieNode) HigherAddedNode(key TrieKey) *BinTrieNode {
+func (node *BinTrieNode[E, V]) HigherAddedNode(key E) *BinTrieNode[E, V] {
 	return node.findNodeNear(key, false, true)
 }
 
-func (node *BinTrieNode) CeilingAddedNode(key TrieKey) *BinTrieNode {
+func (node *BinTrieNode[E, V]) CeilingAddedNode(key E) *BinTrieNode[E, V] {
 	return node.findNodeNear(key, false, false)
 }
 
 // Iterator returns an iterator that iterates through the elements of the sub-tree with this node as the root.
 // The iteration is in sorted element order.
-func (node *BinTrieNode) Iterator() TrieKeyIterator {
-	return trieKeyIterator{node.toBinTreeNode().iterator()}
+func (node *BinTrieNode[E, V]) Iterator() TrieKeyIterator[E] {
+	return trieKeyIterator[E]{node.toBinTreeNode().iterator()}
 }
 
 // DescendingIterator returns an iterator that iterates through the elements of the subtrie with this node as the root.
 // The iteration is in reverse sorted element order.
-func (node *BinTrieNode) DescendingIterator() TrieKeyIterator {
-	return trieKeyIterator{node.toBinTreeNode().descendingIterator()}
+func (node *BinTrieNode[E, V]) DescendingIterator() TrieKeyIterator[E] {
+	return trieKeyIterator[E]{node.toBinTreeNode().descendingIterator()}
 }
 
 // NodeIterator returns an iterator that iterates through the added nodes of the sub-tree with this node as the root, in forward or reverse tree order.
-func (node *BinTrieNode) NodeIterator(forward bool) TrieNodeIteratorRem {
-	return trieNodeIteratorRem{node.toBinTreeNode().nodeIterator(forward)}
+func (node *BinTrieNode[E, V]) NodeIterator(forward bool) TrieNodeIteratorRem[E, V] {
+	return trieNodeIteratorRem[E, V]{node.toBinTreeNode().nodeIterator(forward)}
 }
 
 // AllNodeIterator returns an iterator that iterates through all the nodes of the sub-tree with this node as the root, in forward or reverse tree order.
-func (node *BinTrieNode) AllNodeIterator(forward bool) TrieNodeIteratorRem {
-	return trieNodeIteratorRem{node.toBinTreeNode().allNodeIterator(forward)}
+func (node *BinTrieNode[E, V]) AllNodeIterator(forward bool) TrieNodeIteratorRem[E, V] {
+	return trieNodeIteratorRem[E, V]{node.toBinTreeNode().allNodeIterator(forward)}
 }
 
 // BlockSizeNodeIterator returns an iterator that iterates the added nodes, ordered by keys from largest prefix blocks (smallest prefix length) to smallest (largest prefix length) and then to individual addresses,
 // in the sub-trie with this node as the root.
 //
 // If lowerSubNodeFirst is true, for blocks of equal size the lower is first, otherwise the reverse order is taken.
-func (node *BinTrieNode) BlockSizeNodeIterator(lowerSubNodeFirst bool) TrieNodeIteratorRem {
+func (node *BinTrieNode[E, V]) BlockSizeNodeIterator(lowerSubNodeFirst bool) TrieNodeIteratorRem[E, V] {
 	return node.blockSizeNodeIterator(lowerSubNodeFirst, true)
 }
 
@@ -1202,12 +1264,12 @@ func (node *BinTrieNode) BlockSizeNodeIterator(lowerSubNodeFirst bool) TrieNodeI
 // in the sub-trie with this node as the root.
 //
 // If lowerSubNodeFirst is true, for blocks of equal size the lower is first, otherwise the reverse order
-func (node *BinTrieNode) BlockSizeAllNodeIterator(lowerSubNodeFirst bool) TrieNodeIteratorRem {
+func (node *BinTrieNode[E, V]) BlockSizeAllNodeIterator(lowerSubNodeFirst bool) TrieNodeIteratorRem[E, V] {
 	return node.blockSizeNodeIterator(lowerSubNodeFirst, false)
 }
 
 // BlockSizeCompare compares keys by block size and then by prefix value if block sizes are equal
-func BlockSizeCompare(key1, key2 TrieKey, reverseBlocksEqualSize bool) int {
+func BlockSizeCompare[E TrieKey[E]](key1, key2 E, reverseBlocksEqualSize bool) int {
 	if key2 == key1 {
 		return 0
 	}
@@ -1237,7 +1299,7 @@ func BlockSizeCompare(key1, key2 TrieKey, reverseBlocksEqualSize bool) int {
 	return compVal
 }
 
-func (node *BinTrieNode) blockSizeNodeIterator(lowerSubNodeFirst, addedNodesOnly bool) TrieNodeIteratorRem {
+func (node *BinTrieNode[E, V]) blockSizeNodeIterator(lowerSubNodeFirst, addedNodesOnly bool) TrieNodeIteratorRem[E, V] {
 	reverseBlocksEqualSize := !lowerSubNodeFirst
 	var size int
 	if addedNodesOnly {
@@ -1248,63 +1310,65 @@ func (node *BinTrieNode) blockSizeNodeIterator(lowerSubNodeFirst, addedNodesOnly
 		addedNodesOnly,
 		node.toBinTreeNode(),
 		func(one, two E) int {
-			val := BlockSizeCompare(one.(TrieKey), two.(TrieKey), reverseBlocksEqualSize)
+			val := BlockSizeCompare(one, two, reverseBlocksEqualSize)
 			return -val
 		})
-	return trieNodeIteratorRem{&iter}
+	return trieNodeIteratorRem[E, V]{&iter}
 }
 
 // BlockSizeCachingAllNodeIterator returns an iterator of all nodes, ordered by keys from largest prefix blocks to smallest and then to individual addresses,
 // in the sub-trie with this node as the root.
 //
 // This iterator allows you to cache an object with subnodes so that when those nodes are visited the cached object can be retrieved.
-func (node *BinTrieNode) BlockSizeCachingAllNodeIterator() CachingTrieNodeIterator {
+func (node *BinTrieNode[E, V]) BlockSizeCachingAllNodeIterator() CachingTrieNodeIterator[E, V] {
 	iter := newCachingPriorityNodeIterator(
 		node.toBinTreeNode(),
 		func(one, two E) int {
-			val := BlockSizeCompare(one.(TrieKey), two.(TrieKey), false)
+			val := BlockSizeCompare(one, two, false)
 			return -val
 		})
-	return &cachingTrieNodeIterator{&iter}
+	return &cachingTrieNodeIterator[E, V]{&iter}
 }
 
-func (node *BinTrieNode) ContainingFirstIterator(forwardSubNodeOrder bool) CachingTrieNodeIterator {
-	return &cachingTrieNodeIterator{node.toBinTreeNode().containingFirstIterator(forwardSubNodeOrder)}
+func (node *BinTrieNode[E, V]) ContainingFirstIterator(forwardSubNodeOrder bool) CachingTrieNodeIterator[E, V] {
+	return &cachingTrieNodeIterator[E, V]{node.toBinTreeNode().containingFirstIterator(forwardSubNodeOrder)}
 }
 
-func (node *BinTrieNode) ContainingFirstAllNodeIterator(forwardSubNodeOrder bool) CachingTrieNodeIterator {
-	return &cachingTrieNodeIterator{node.toBinTreeNode().containingFirstAllNodeIterator(forwardSubNodeOrder)}
+func (node *BinTrieNode[E, V]) ContainingFirstAllNodeIterator(forwardSubNodeOrder bool) CachingTrieNodeIterator[E, V] {
+	return &cachingTrieNodeIterator[E, V]{node.toBinTreeNode().containingFirstAllNodeIterator(forwardSubNodeOrder)}
 }
 
-func (node *BinTrieNode) ContainedFirstIterator(forwardSubNodeOrder bool) TrieNodeIteratorRem {
-	return trieNodeIteratorRem{node.toBinTreeNode().containedFirstIterator(forwardSubNodeOrder)}
+func (node *BinTrieNode[E, V]) ContainedFirstIterator(forwardSubNodeOrder bool) TrieNodeIteratorRem[E, V] {
+	return trieNodeIteratorRem[E, V]{node.toBinTreeNode().containedFirstIterator(forwardSubNodeOrder)}
 }
 
-func (node *BinTrieNode) ContainedFirstAllNodeIterator(forwardSubNodeOrder bool) TrieNodeIterator {
-	return trieNodeIterator{node.toBinTreeNode().containedFirstAllNodeIterator(forwardSubNodeOrder)}
+func (node *BinTrieNode[E, V]) ContainedFirstAllNodeIterator(forwardSubNodeOrder bool) TrieNodeIterator[E, V] {
+	return trieNodeIterator[E, V]{node.toBinTreeNode().containedFirstAllNodeIterator(forwardSubNodeOrder)}
 }
 
 // Clone clones the node.
 // Keys remain the same, but the parent node and the lower and upper sub-nodes are all set to nil.
-func (node *BinTrieNode) Clone() *BinTrieNode {
-	return node.toBinTreeNode().clone().toTrieNode()
+func (node *BinTrieNode[E, V]) Clone() *BinTrieNode[E, V] {
+	//return node.toBinTreeNode().clone().toTrieNode()
+	return toTrieNode(node.toBinTreeNode().clone())
 }
 
 // CloneTree clones the sub-tree starting with this node as root.
 // The nodes are cloned, but their keys and values are not cloned.
-func (node *BinTrieNode) CloneTree() *BinTrieNode {
-	return node.toBinTreeNode().cloneTree().toTrieNode()
+func (node *BinTrieNode[E, V]) CloneTree() *BinTrieNode[E, V] {
+	//return node.toBinTreeNode().cloneTree().toTrieNode()
+	return toTrieNode(node.toBinTreeNode().cloneTree())
 }
 
 // AsNewTrie creates a new sub-trie, copying the nodes starting with this node as root.
 // The nodes are copies of the nodes in this sub-trie, but their keys and values are not copies.
-func (node *BinTrieNode) AsNewTrie() *BinTrie {
+func (node *BinTrieNode[E, V]) AsNewTrie() *BinTrie[E, V] {
 	// I suspect clone is faster - in Java I used AddTrie to add the bounded part of the trie if it was bounded
 	// but AddTrie needs to insert nodes amongst existing nodes, clone does not
 	// newTrie := NewBinTrie(key)
 	// newTrie.AddTrie(node)
 	key := node.GetKey()
-	trie := &BinTrie{binTree{}}
+	trie := &BinTrie[E, V]{binTree[E, V]{}}
 	rootKey := key.ToPrefixBlockLen(0)
 	trie.setRoot(rootKey)
 	root := trie.root
@@ -1326,7 +1390,7 @@ func (node *BinTrieNode) AsNewTrie() *BinTrie {
 }
 
 // Equal returns whether the key matches the key of the given node
-func (node *BinTrieNode) Equal(other *BinTrieNode) bool {
+func (node *BinTrieNode[E, V]) Equal(other *BinTrieNode[E, V]) bool {
 	if node == nil {
 		return other == nil
 	} else if other == nil {
@@ -1337,7 +1401,7 @@ func (node *BinTrieNode) Equal(other *BinTrieNode) bool {
 
 // DeepEqual returns whether the key matches the key of the given node using Compare,
 // and whether the value matches the other value using reflect.DeepEqual
-func (node *BinTrieNode) DeepEqual(other *BinTrieNode) bool {
+func (node *BinTrieNode[E, V]) DeepEqual(other *BinTrieNode[E, V]) bool {
 	if node == nil {
 		return other == nil
 	} else if other == nil {
@@ -1347,24 +1411,25 @@ func (node *BinTrieNode) DeepEqual(other *BinTrieNode) bool {
 }
 
 // TreeEqual returns whether the sub-tree represented by this node as the root node matches the given sub-tree, matching the trie keys using the Compare method
-func (node *BinTrieNode) TreeEqual(other *BinTrieNode) bool {
+func (node *BinTrieNode[E, V]) TreeEqual(other *BinTrieNode[E, V]) bool {
 	if other == node {
 		return true
 	} else if other.Size() != node.Size() {
 		return false
 	}
 	these, others := node.Iterator(), other.Iterator()
-	thisKey := these.Next()
-	for ; thisKey != nil; thisKey = these.Next() {
-		if thisKey.Compare(others.Next()) != 0 {
-			return false
+	if these.HasNext() {
+		for thisKey := these.Next(); these.HasNext(); thisKey = these.Next() {
+			if thisKey.Compare(others.Next()) != 0 {
+				return false
+			}
 		}
 	}
 	return true
 }
 
 // TreeDeepEqual returns whether the sub-tree represented by this node as the root node matches the given sub-tree, matching the nodes using DeepEqual
-func (node *BinTrieNode) TreeDeepEqual(other *BinTrieNode) bool {
+func (node *BinTrieNode[E, V]) TreeDeepEqual(other *BinTrieNode[E, V]) bool {
 	if other == node {
 		return true
 	} else if other.Size() != node.Size() {
@@ -1381,7 +1446,7 @@ func (node *BinTrieNode) TreeDeepEqual(other *BinTrieNode) bool {
 }
 
 // Compare returns -1, 0 or 1 if this node is less than, equal, or greater than the other, according to the key and the trie order.
-func (node *BinTrieNode) Compare(other *BinTrieNode) int {
+func (node *BinTrieNode[E, V]) Compare(other *BinTrieNode[E, V]) int {
 	if node == nil {
 		if other == nil {
 			return 0
@@ -1398,12 +1463,13 @@ func (node *BinTrieNode) Compare(other *BinTrieNode) int {
 // Seems to be a problem only in the debugger.
 
 // Format implements the fmt.Formatter interface
-func (node BinTrieNode) Format(state fmt.State, verb rune) {
+func (node BinTrieNode[E, V]) Format(state fmt.State, verb rune) {
 	node.format(state, verb)
 }
 
-// TrieIncrement returns the next key according to the trie ordering
-func TrieIncrement(key TrieKey) TrieKey {
+// TrieIncrement returns the next key according to the trie ordering.
+// The zero value is returned when there is no next key.
+func TrieIncrement[E TrieKey[E]](key E) E {
 	prefLen := key.GetPrefixLen()
 	if prefLen != nil {
 		return key.ToMinUpper()
@@ -1413,11 +1479,13 @@ func TrieIncrement(key TrieKey) TrieKey {
 	if trailingBits < bitCount {
 		return key.ToPrefixBlockLen(bitCount - (trailingBits + 1))
 	}
-	return nil
+	var e E
+	return e
 }
 
 // TrieDecrement returns the previous key according to the trie ordering
-func TrieDecrement(key TrieKey) TrieKey {
+// The zero value is returned when there is no previous key.
+func TrieDecrement[E TrieKey[E]](key E) E {
 	prefLen := key.GetPrefixLen()
 	if prefLen != nil {
 		return key.ToMaxLower()
@@ -1427,5 +1495,6 @@ func TrieDecrement(key TrieKey) TrieKey {
 	if trailingBits < bitCount {
 		return key.ToPrefixBlockLen(bitCount - (trailingBits + 1))
 	}
-	return nil
+	var e E
+	return e
 }

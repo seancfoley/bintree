@@ -23,7 +23,7 @@ type HasNext interface {
 	HasNext() bool
 }
 
-type keyIterator interface {
+type keyIterator[E Key] interface {
 	HasNext
 
 	Next() E
@@ -33,75 +33,77 @@ type keyIterator interface {
 	Remove() E
 }
 
-type nodeIteratorRem interface {
-	nodeIterator
+type nodeIteratorRem[E Key, V any] interface {
+	nodeIterator[E, V]
 
 	// Remove removes the last iterated element from the underlying trie, and returns that element.
 	// If there is no such element, it returns nil.
-	Remove() *binTreeNode
+	Remove() *binTreeNode[E, V]
 }
 
-type nodeIterator interface {
+type nodeIterator[E Key, V any] interface {
 	HasNext
 
-	Next() *binTreeNode
+	Next() *binTreeNode[E, V]
 }
 
-type binTreeKeyIterator struct {
-	nodeIteratorRem
+type binTreeKeyIterator[E Key, V any] struct {
+	nodeIteratorRem[E, V]
 }
 
-func (iter binTreeKeyIterator) Next() E {
-	node := iter.nodeIteratorRem.Next()
-	if node != nil {
-		return node.getKey()
-	}
-	return nil
+func (iter binTreeKeyIterator[E, V]) Next() E {
+	return iter.nodeIteratorRem.Next().getKey()
+	//node := iter.nodeIteratorRem.Next()
+	//if node != nil {
+	//	return node.getKey()
+	//}
+	//return nil
 }
 
-func (iter binTreeKeyIterator) Remove() E {
-	node := iter.nodeIteratorRem.Remove()
-	if node != nil {
-		return node.getKey()
-	}
-	return nil
+func (iter binTreeKeyIterator[E, V]) Remove() E {
+	return iter.nodeIteratorRem.Remove().getKey()
+	//node := iter.nodeIteratorRem.Remove()
+	//if node != nil {
+	//	return node.getKey()
+	//}
+	//return nil
 }
 
-func newNodeIterator(forward, addedOnly bool, start, end *binTreeNode, ctracker *changeTracker) nodeIteratorRem {
-	var nextOperator func(current *binTreeNode, end *binTreeNode) *binTreeNode
+func newNodeIterator[E Key, V any](forward, addedOnly bool, start, end *binTreeNode[E, V], ctracker *changeTracker) nodeIteratorRem[E, V] {
+	var nextOperator func(current *binTreeNode[E, V], end *binTreeNode[E, V]) *binTreeNode[E, V]
 	if forward {
-		nextOperator = (*binTreeNode).nextNodeBounded
+		nextOperator = (*(binTreeNode[E, V])).nextNodeBounded
 	} else {
-		nextOperator = (*binTreeNode).previousNodeBounded
+		nextOperator = (*binTreeNode[E, V]).previousNodeBounded
 	}
 	if addedOnly {
 		wrappedOp := nextOperator
-		nextOperator = func(currentNode *binTreeNode, endNode *binTreeNode) *binTreeNode {
+		nextOperator = func(currentNode *binTreeNode[E, V], endNode *binTreeNode[E, V]) *binTreeNode[E, V] {
 			return currentNode.nextAdded(endNode, wrappedOp)
 		}
 	}
-	res := binTreeNodeIterator{end: end}
+	res := binTreeNodeIterator[E, V]{end: end}
 	res.setChangeTracker(ctracker)
 	res.operator = nextOperator
 	res.next = res.getStart(start, end, nil, addedOnly)
 	return &res
 }
 
-type binTreeNodeIterator struct {
+type binTreeNodeIterator[E Key, V any] struct {
 	// takes current node and end as args
-	operator      func(currentNode *binTreeNode, endNode *binTreeNode) (nextNode *binTreeNode)
-	end           *binTreeNode // a non-nil node that denotes the end, possibly parent of the starting node
+	operator      func(currentNode *binTreeNode[E, V], endNode *binTreeNode[E, V]) (nextNode *binTreeNode[E, V])
+	end           *binTreeNode[E, V] // a non-nil node that denotes the end, possibly parent of the starting node
 	cTracker      *changeTracker
 	currentChange change
 
-	current, next *binTreeNode
+	current, next *binTreeNode[E, V]
 }
 
-func (iter *binTreeNodeIterator) getStart(
+func (iter *binTreeNodeIterator[E, V]) getStart(
 	start,
-	end *binTreeNode,
-	bounds *bounds,
-	addedOnly bool) *binTreeNode {
+	end *binTreeNode[E, V],
+	bounds *bounds[E],
+	addedOnly bool) *binTreeNode[E, V] {
 	if start == end || start == nil {
 		return nil
 	}
@@ -113,17 +115,17 @@ func (iter *binTreeNodeIterator) getStart(
 	return iter.toNext(start)
 }
 
-func (iter *binTreeNodeIterator) setChangeTracker(ctracker *changeTracker) {
+func (iter *binTreeNodeIterator[E, V]) setChangeTracker(ctracker *changeTracker) {
 	if ctracker != nil {
 		iter.cTracker, iter.currentChange = ctracker, ctracker.getCurrent()
 	}
 }
 
-func (iter *binTreeNodeIterator) HasNext() bool {
+func (iter *binTreeNodeIterator[E, V]) HasNext() bool {
 	return iter.next != nil
 }
 
-func (iter *binTreeNodeIterator) Next() *binTreeNode {
+func (iter *binTreeNodeIterator[E, V]) Next() *binTreeNode[E, V] {
 	if !iter.HasNext() {
 		return nil
 	}
@@ -136,11 +138,11 @@ func (iter *binTreeNodeIterator) Next() *binTreeNode {
 	return iter.current
 }
 
-func (iter *binTreeNodeIterator) toNext(current *binTreeNode) *binTreeNode {
+func (iter *binTreeNodeIterator[E, V]) toNext(current *binTreeNode[E, V]) *binTreeNode[E, V] {
 	return iter.operator(current, iter.end)
 }
 
-func (iter *binTreeNodeIterator) Remove() *binTreeNode {
+func (iter *binTreeNodeIterator[E, V]) Remove() *binTreeNode[E, V] {
 	if iter.current == nil {
 		return nil
 	}
@@ -157,7 +159,7 @@ func (iter *binTreeNodeIterator) Remove() *binTreeNode {
 	return result
 }
 
-var _ nodeIteratorRem = &binTreeNodeIterator{}
+//var _ nodeIteratorRem = &binTreeNodeIterator{} // TODO need to choose a key and a Value here
 
 type CachingIterator interface {
 	// GetCached returns an object previously cached with the current iterated node.
@@ -190,16 +192,18 @@ type CachingIterator interface {
 	CacheWithUpperSubNode(C) bool
 }
 
-type cachingNodeIterator interface {
-	nodeIteratorRem
+type cachingNodeIterator[E Key, V any] interface {
+	nodeIteratorRem[E, V]
 
 	CachingIterator
 }
 
+type queueType = any
+
 // see https://pkg.go.dev/container/heap
 type nodePriorityQueue struct {
-	queue      []interface{}
-	comparator func(one, two interface{}) int // -1, 0 or 1 if one is <, == or > two
+	queue      []queueType
+	comparator func(one, two queueType) int // -1, 0 or 1 if one is <, == or > two
 	//queue      []*binTreeNode
 	//comparator func(one, two *binTreeNode) int // -1, 0 or 1 if one is <, == or > two
 }
@@ -218,11 +222,11 @@ func (prioQueue nodePriorityQueue) Swap(i, j int) {
 	queue[i], queue[j] = queue[j], queue[i]
 }
 
-func (prioQueue *nodePriorityQueue) Push(x interface{}) {
+func (prioQueue *nodePriorityQueue) Push(x queueType) {
 	prioQueue.queue = append(prioQueue.queue, x)
 }
 
-func (prioQueue *nodePriorityQueue) Pop() interface{} {
+func (prioQueue *nodePriorityQueue) Pop() queueType {
 	current := prioQueue.queue
 	queueLen := len(current)
 	topNode := current[queueLen-1]
@@ -231,12 +235,12 @@ func (prioQueue *nodePriorityQueue) Pop() interface{} {
 	return topNode
 }
 
-func newPriorityNodeIterator(
+func newPriorityNodeIterator[E Key, V any](
 	treeSize int,
 	addedOnly bool,
-	start *binTreeNode,
+	start *binTreeNode[E, V],
 	comparator func(E, E) int,
-) binTreeNodeIterator {
+) binTreeNodeIterator[E, V] {
 	return newPriorityNodeIteratorBounded(
 		nil,
 		treeSize,
@@ -245,24 +249,24 @@ func newPriorityNodeIterator(
 		comparator)
 }
 
-func newPriorityNodeIteratorBounded(
-	bnds *bounds,
+func newPriorityNodeIteratorBounded[E Key, V any](
+	bnds *bounds[E],
 	treeSize int,
 	addedOnly bool,
-	start *binTreeNode,
-	comparator func(E, E) int) binTreeNodeIterator {
+	start *binTreeNode[E, V],
+	comparator func(E, E) int) binTreeNodeIterator[E, V] {
 
-	comp := func(one, two interface{}) int {
-		node1, node2 := one.(*binTreeNode), two.(*binTreeNode)
+	comp := func(one, two queueType) int {
+		node1, node2 := one.(*binTreeNode[E, V]), two.(*binTreeNode[E, V])
 		addr1, addr2 := node1.getKey(), node2.getKey()
 		return comparator(addr1, addr2)
 	}
 	queue := &nodePriorityQueue{comparator: comp}
 	if treeSize > 0 {
-		//queue.queue = make([]*binTreeNode, 0, (treeSize+2)>>1)
-		queue.queue = make([]interface{}, 0, (treeSize+2)>>1)
+		//queue.queue = make([]*binTreeNode[E, V], 0, (treeSize+2)>>1)
+		queue.queue = make([]queueType, 0, (treeSize+2)>>1)
 	}
-	op := func(currentNode *binTreeNode, endNode *binTreeNode) *binTreeNode {
+	op := func(currentNode *binTreeNode[E, V], endNode *binTreeNode[E, V]) *binTreeNode[E, V] {
 		lower := currentNode.getLowerSubNode()
 		if lower != nil {
 			heap.Push(queue, lower)
@@ -271,9 +275,9 @@ func newPriorityNodeIteratorBounded(
 		if upper != nil {
 			heap.Push(queue, upper)
 		}
-		var node *binTreeNode
+		var node *binTreeNode[E, V]
 		if queue.Len() > 0 {
-			node = heap.Pop(queue).(*binTreeNode)
+			node = heap.Pop(queue).(*binTreeNode[E, V])
 		}
 		if node == endNode {
 			return nil
@@ -283,17 +287,17 @@ func newPriorityNodeIteratorBounded(
 	}
 	if addedOnly {
 		wrappedOp := op
-		op = func(currentNode *binTreeNode, endNode *binTreeNode) *binTreeNode {
+		op = func(currentNode *binTreeNode[E, V], endNode *binTreeNode[E, V]) *binTreeNode[E, V] {
 			return currentNode.nextAdded(endNode, wrappedOp)
 		}
 	}
 	if bnds != nil {
 		wrappedOp := op
-		op = func(currentNode *binTreeNode, endNode *binTreeNode) *binTreeNode {
+		op = func(currentNode *binTreeNode[E, V], endNode *binTreeNode[E, V]) *binTreeNode[E, V] {
 			return currentNode.nextInBounds(endNode, wrappedOp, bnds)
 		}
 	}
-	res := binTreeNodeIterator{operator: op}
+	res := binTreeNodeIterator[E, V]{operator: op}
 	start = res.getStart(start, nil, bnds, addedOnly)
 	if start != nil {
 		res.next = start
@@ -302,32 +306,32 @@ func newPriorityNodeIteratorBounded(
 	return res
 }
 
-func newCachingPriorityNodeIterator(
-	start *binTreeNode,
+func newCachingPriorityNodeIterator[E Key, V any](
+	start *binTreeNode[E, V],
 	comparator func(E, E) int,
-) cachingPriorityNodeIterator {
+) cachingPriorityNodeIterator[E, V] {
 	return newCachingPriorityNodeIteratorSized(
 		0,
 		start,
 		comparator)
 }
 
-func newCachingPriorityNodeIteratorSized(
+func newCachingPriorityNodeIteratorSized[E Key, V any](
 	treeSize int,
-	start *binTreeNode,
-	comparator func(E, E) int) cachingPriorityNodeIterator {
+	start *binTreeNode[E, V],
+	comparator func(E, E) int) cachingPriorityNodeIterator[E, V] {
 
-	comp := func(one, two interface{}) int {
-		cached1, cached2 := one.(*cached), two.(*cached)
+	comp := func(one, two queueType) int {
+		cached1, cached2 := one.(*cached[E, V]), two.(*cached[E, V])
 		node1, node2 := cached1.node, cached2.node
 		addr1, addr2 := node1.getKey(), node2.getKey()
 		return comparator(addr1, addr2)
 	}
 	queue := &nodePriorityQueue{comparator: comp}
 	if treeSize > 0 {
-		queue.queue = make([]interface{}, 0, (treeSize+2)>>1)
+		queue.queue = make([]queueType, 0, (treeSize+2)>>1)
 	}
-	res := cachingPriorityNodeIterator{cached: &cachedObjs{}}
+	res := cachingPriorityNodeIterator[E, V]{cached: &cachedObjs[E, V]{}}
 	res.operator = res.getNextOperation(queue)
 	start = res.getStart(start, nil, nil, false)
 	if start != nil {
@@ -337,23 +341,23 @@ func newCachingPriorityNodeIteratorSized(
 	return res
 }
 
-type cachedObjs struct {
+type cachedObjs[E Key, V any] struct {
 	cacheItem                    C
-	nextCachedItem               *cached
-	lowerCacheObj, upperCacheObj *cached
+	nextCachedItem               *cached[E, V]
+	lowerCacheObj, upperCacheObj *cached[E, V]
 }
 
-type cachingPriorityNodeIterator struct {
-	binTreeNodeIterator
-	cached *cachedObjs
+type cachingPriorityNodeIterator[E Key, V any] struct {
+	binTreeNodeIterator[E, V]
+	cached *cachedObjs[E, V]
 }
 
-func (iter *cachingPriorityNodeIterator) getNextOperation(queue *nodePriorityQueue) func(currentNode *binTreeNode, endNode *binTreeNode) *binTreeNode {
-	return func(currentNode *binTreeNode, endNode *binTreeNode) *binTreeNode {
+func (iter *cachingPriorityNodeIterator[E, V]) getNextOperation(queue *nodePriorityQueue) func(currentNode *binTreeNode[E, V], endNode *binTreeNode[E, V]) *binTreeNode[E, V] {
+	return func(currentNode *binTreeNode[E, V], endNode *binTreeNode[E, V]) *binTreeNode[E, V] {
 		lower := currentNode.getLowerSubNode()
 		cacheObjs := iter.cached
 		if lower != nil {
-			cachd := &cached{
+			cachd := &cached[E, V]{
 				node: lower,
 			}
 			cacheObjs.lowerCacheObj = cachd
@@ -363,7 +367,7 @@ func (iter *cachingPriorityNodeIterator) getNextOperation(queue *nodePriorityQue
 		}
 		upper := currentNode.getUpperSubNode()
 		if upper != nil {
-			cachd := &cached{
+			cachd := &cached[E, V]{
 				node: upper,
 			}
 			cacheObjs.upperCacheObj = cachd
@@ -374,12 +378,12 @@ func (iter *cachingPriorityNodeIterator) getNextOperation(queue *nodePriorityQue
 		if cacheObjs.nextCachedItem != nil {
 			cacheObjs.cacheItem = cacheObjs.nextCachedItem.cached
 		}
-		var item interface{}
+		var item queueType
 		if queue.Len() > 0 {
 			item = heap.Pop(queue)
 		}
 		if item != nil {
-			cachd := item.(*cached)
+			cachd := item.(*cached[E, V])
 			node := cachd.node
 			if node != endNode {
 				cacheObjs.nextCachedItem = cachd
@@ -391,11 +395,11 @@ func (iter *cachingPriorityNodeIterator) getNextOperation(queue *nodePriorityQue
 	}
 }
 
-func (iter *cachingPriorityNodeIterator) GetCached() C {
+func (iter *cachingPriorityNodeIterator[E, V]) GetCached() C {
 	return iter.cached.cacheItem
 }
 
-func (iter *cachingPriorityNodeIterator) CacheWithLowerSubNode(object C) bool {
+func (iter *cachingPriorityNodeIterator[E, V]) CacheWithLowerSubNode(object C) bool {
 	cached := iter.cached
 	if cached.lowerCacheObj != nil {
 		cached.lowerCacheObj.cached = object
@@ -404,7 +408,7 @@ func (iter *cachingPriorityNodeIterator) CacheWithLowerSubNode(object C) bool {
 	return false
 }
 
-func (iter *cachingPriorityNodeIterator) CacheWithUpperSubNode(object C) bool {
+func (iter *cachingPriorityNodeIterator[E, V]) CacheWithUpperSubNode(object C) bool {
 	cached := iter.cached
 	if cached.upperCacheObj != nil {
 		cached.upperCacheObj.cached = object
@@ -413,19 +417,19 @@ func (iter *cachingPriorityNodeIterator) CacheWithUpperSubNode(object C) bool {
 	return false
 }
 
-type cached struct {
-	node   *binTreeNode
+type cached[E Key, V any] struct {
+	node   *binTreeNode[E, V]
 	cached C
 }
 
-var _ cachingNodeIterator = &cachingPriorityNodeIterator{}
+//var _ cachingNodeIterator = &cachingPriorityNodeIterator{} //TODO need to choose E and V here
 
 // The caching only useful when in reverse order, since you have to visit parent nodes first for it to be useful.
-func newPostOrderNodeIterator(
+func newPostOrderNodeIterator[E Key, V any](
 	forward, addedOnly bool,
-	start, end *binTreeNode,
+	start, end *binTreeNode[E, V],
 	ctracker *changeTracker,
-) subNodeCachingIterator {
+) subNodeCachingIterator[E, V] {
 	return newPostOrderNodeIteratorBounded(
 		nil,
 		forward, addedOnly,
@@ -433,31 +437,31 @@ func newPostOrderNodeIterator(
 		ctracker)
 }
 
-func newPostOrderNodeIteratorBounded(
-	bnds *bounds,
+func newPostOrderNodeIteratorBounded[E Key, V any](
+	bnds *bounds[E],
 	forward, addedOnly bool,
-	start, end *binTreeNode,
-	ctracker *changeTracker) subNodeCachingIterator {
-	var op func(current *binTreeNode, end *binTreeNode) *binTreeNode
+	start, end *binTreeNode[E, V],
+	ctracker *changeTracker) subNodeCachingIterator[E, V] {
+	var op func(current *binTreeNode[E, V], end *binTreeNode[E, V]) *binTreeNode[E, V]
 	if forward {
-		op = (*binTreeNode).nextPostOrderNode
+		op = (*binTreeNode[E, V]).nextPostOrderNode
 	} else {
-		op = (*binTreeNode).previousPostOrderNode
+		op = (*(binTreeNode[E, V])).previousPostOrderNode
 	}
 	// do the added-only filter first, because it is simpler
 	if addedOnly {
 		wrappedOp := op
-		op = func(currentNode *binTreeNode, endNode *binTreeNode) *binTreeNode {
+		op = func(currentNode *binTreeNode[E, V], endNode *binTreeNode[E, V]) *binTreeNode[E, V] {
 			return currentNode.nextAdded(endNode, wrappedOp)
 		}
 	}
 	if bnds != nil {
 		wrappedOp := op
-		op = func(currentNode *binTreeNode, endNode *binTreeNode) *binTreeNode {
+		op = func(currentNode *binTreeNode[E, V], endNode *binTreeNode[E, V]) *binTreeNode[E, V] {
 			return currentNode.nextInBounds(endNode, wrappedOp, bnds)
 		}
 	}
-	return newSubNodeCachingIterator(
+	return newSubNodeCachingIterator[E, V](
 		bnds,
 		forward, addedOnly,
 		start, end,
@@ -468,10 +472,10 @@ func newPostOrderNodeIteratorBounded(
 }
 
 // The caching only useful when in forward order, since you have to visit parent nodes first for it to be useful.
-func newPreOrderNodeIterator(
+func newPreOrderNodeIterator[E Key, V any](
 	forward, addedOnly bool,
-	start, end *binTreeNode,
-	ctracker *changeTracker) subNodeCachingIterator {
+	start, end *binTreeNode[E, V],
+	ctracker *changeTracker) subNodeCachingIterator[E, V] {
 	return newPreOrderNodeIteratorBounded(
 		nil,
 		forward, addedOnly,
@@ -479,27 +483,27 @@ func newPreOrderNodeIterator(
 		ctracker)
 }
 
-func newPreOrderNodeIteratorBounded(
-	bnds *bounds,
+func newPreOrderNodeIteratorBounded[E Key, V any](
+	bnds *bounds[E],
 	forward, addedOnly bool,
-	start, end *binTreeNode,
-	ctracker *changeTracker) subNodeCachingIterator {
-	var op func(current *binTreeNode, end *binTreeNode) *binTreeNode
+	start, end *binTreeNode[E, V],
+	ctracker *changeTracker) subNodeCachingIterator[E, V] {
+	var op func(current *binTreeNode[E, V], end *binTreeNode[E, V]) *binTreeNode[E, V]
 	if forward {
-		op = (*binTreeNode).nextPreOrderNode
+		op = (*binTreeNode[E, V]).nextPreOrderNode
 	} else {
-		op = (*binTreeNode).previousPreOrderNode
+		op = (*binTreeNode[E, V]).previousPreOrderNode
 	}
 	// do the added-only filter first, because it is simpler
 	if addedOnly {
 		wrappedOp := op
-		op = func(currentNode *binTreeNode, endNode *binTreeNode) *binTreeNode {
+		op = func(currentNode *binTreeNode[E, V], endNode *binTreeNode[E, V]) *binTreeNode[E, V] {
 			return currentNode.nextAdded(endNode, wrappedOp)
 		}
 	}
 	if bnds != nil {
 		wrappedOp := op
-		op = func(currentNode *binTreeNode, endNode *binTreeNode) *binTreeNode {
+		op = func(currentNode *binTreeNode[E, V], endNode *binTreeNode[E, V]) *binTreeNode[E, V] {
 			return currentNode.nextInBounds(endNode, wrappedOp, bnds)
 		}
 	}
@@ -513,23 +517,23 @@ func newPreOrderNodeIteratorBounded(
 		forward || addedOnly)
 }
 
-func newSubNodeCachingIterator(
-	bnds *bounds,
+func newSubNodeCachingIterator[E Key, V any](
+	bnds *bounds[E],
 	forward, addedOnly bool,
-	start, end *binTreeNode,
+	start, end *binTreeNode[E, V],
 	ctracker *changeTracker,
-	nextOperator func(current *binTreeNode, end *binTreeNode) *binTreeNode,
+	nextOperator func(current *binTreeNode[E, V], end *binTreeNode[E, V]) *binTreeNode[E, V],
 	allowCaching,
 	allowRemove bool,
-) subNodeCachingIterator {
-	res := subNodeCachingIterator{
+) subNodeCachingIterator[E, V] {
+	res := subNodeCachingIterator[E, V]{
 		allowCaching:        allowCaching,
 		allowRemove:         allowRemove,
 		stackIndex:          -1,
 		bnds:                bnds,
 		isForward:           forward,
 		addedOnly:           addedOnly,
-		binTreeNodeIterator: binTreeNodeIterator{end: end},
+		binTreeNodeIterator: binTreeNodeIterator[E, V]{end: end},
 	}
 	res.setChangeTracker(ctracker)
 	res.operator = nextOperator
@@ -540,16 +544,16 @@ func newSubNodeCachingIterator(
 const ipv6BitCount = 128
 const stackSize = ipv6BitCount + 2 // 129 for prefixes /0 to /128 and also 1 more for non-prefixed
 
-type subNodeCachingIterator struct {
-	binTreeNodeIterator
+type subNodeCachingIterator[E Key, V any] struct {
+	binTreeNodeIterator[E, V]
 
 	cacheItem  C
 	nextKey    E
 	nextCached C
-	stack      []interface{}
+	stack      []C
 	stackIndex int
 
-	bnds                 *bounds
+	bnds                 *bounds[E]
 	addedOnly, isForward bool
 
 	// Both these fields are not really necessary because
@@ -559,7 +563,7 @@ type subNodeCachingIterator struct {
 	allowCaching, allowRemove bool
 }
 
-func (iter *subNodeCachingIterator) Next() *binTreeNode {
+func (iter *subNodeCachingIterator[E, V]) Next() *binTreeNode[E, V] {
 	result := iter.binTreeNodeIterator.Next()
 	if result != nil && iter.allowCaching {
 		iter.populateCacheItem(result)
@@ -567,19 +571,19 @@ func (iter *subNodeCachingIterator) Next() *binTreeNode {
 	return result
 }
 
-func (iter *subNodeCachingIterator) GetCached() C {
+func (iter *subNodeCachingIterator[E, V]) GetCached() C {
 	if !iter.allowCaching {
 		panic("no caching allowed, this code path should not be accessible")
 	}
 	return iter.cacheItem
 }
 
-func (iter *subNodeCachingIterator) populateCacheItem(current *binTreeNode) {
+func (iter *subNodeCachingIterator[E, V]) populateCacheItem(current *binTreeNode[E, V]) {
 	nextKey := iter.nextKey
-	if nextKey != nil && current.getKey() == nextKey {
+	if current.getKey() == nextKey {
 		iter.cacheItem = iter.nextCached
 		iter.nextCached = nil
-		nextKey = nil
+		//nextKey = nil
 	} else {
 		stack := iter.stack
 		if stack != nil {
@@ -598,7 +602,7 @@ func (iter *subNodeCachingIterator) populateCacheItem(current *binTreeNode) {
 	}
 }
 
-func (iter *subNodeCachingIterator) Remove() *binTreeNode {
+func (iter *subNodeCachingIterator[E, V]) Remove() *binTreeNode[E, V] {
 	if !iter.allowRemove {
 		// Example:
 		// Suppose we are at right sub-node, just visited left.  Next node is parent, but not added.
@@ -611,13 +615,13 @@ func (iter *subNodeCachingIterator) Remove() *binTreeNode {
 	return iter.binTreeNodeIterator.Remove()
 }
 
-func (iter *subNodeCachingIterator) checkCaching() {
+func (iter *subNodeCachingIterator[E, V]) checkCaching() {
 	if !iter.allowCaching {
 		panic("no caching allowed, this code path should not be accessible")
 	}
 }
 
-func (iter *subNodeCachingIterator) CacheWithLowerSubNode(object C) bool {
+func (iter *subNodeCachingIterator[E, V]) CacheWithLowerSubNode(object C) bool {
 	iter.checkCaching()
 	if iter.isForward {
 		return iter.cacheWithFirstSubNode(object)
@@ -626,7 +630,7 @@ func (iter *subNodeCachingIterator) CacheWithLowerSubNode(object C) bool {
 
 }
 
-func (iter *subNodeCachingIterator) CacheWithUpperSubNode(object C) bool {
+func (iter *subNodeCachingIterator[E, V]) CacheWithUpperSubNode(object C) bool {
 	iter.checkCaching()
 	if iter.isForward {
 		return iter.cacheWithSecondSubNode(object)
@@ -635,10 +639,10 @@ func (iter *subNodeCachingIterator) CacheWithUpperSubNode(object C) bool {
 }
 
 // the sub-node will be the next visited node
-func (iter *subNodeCachingIterator) cacheWithFirstSubNode(object C) bool {
+func (iter *subNodeCachingIterator[E, V]) cacheWithFirstSubNode(object C) bool {
 	iter.checkCaching()
 	if iter.current != nil {
-		var firstNode *binTreeNode
+		var firstNode *binTreeNode[E, V]
 		if iter.isForward {
 			firstNode = iter.current.getLowerSubNode()
 		} else {
@@ -663,10 +667,10 @@ func (iter *subNodeCachingIterator) cacheWithFirstSubNode(object C) bool {
 
 // the sub-node will only be the next visited node if there is no other sub-node,
 // otherwise it might not be visited for a while
-func (iter *subNodeCachingIterator) cacheWithSecondSubNode(object C) bool {
+func (iter *subNodeCachingIterator[E, V]) cacheWithSecondSubNode(object C) bool {
 	iter.checkCaching()
 	if iter.current != nil {
-		var secondNode *binTreeNode
+		var secondNode *binTreeNode[E, V]
 		if iter.isForward {
 			secondNode = iter.current.getUpperSubNode()
 		} else {
@@ -679,7 +683,7 @@ func (iter *subNodeCachingIterator) cacheWithSecondSubNode(object C) bool {
 			}
 			if secondNode != nil {
 				// if there is no lower node, we can use the nextCached field since upper is next when no lower sub-node
-				var firstNode *binTreeNode
+				var firstNode *binTreeNode[E, V]
 				if iter.isForward {
 					firstNode = iter.current.getLowerSubNode()
 				} else {
@@ -690,7 +694,7 @@ func (iter *subNodeCachingIterator) cacheWithSecondSubNode(object C) bool {
 					iter.nextCached = object
 				} else {
 					if iter.stack == nil {
-						iter.stack = make([]interface{}, stackSize<<1)
+						iter.stack = make([]C, stackSize<<1)
 					}
 					iter.stackIndex++
 					iter.stack[iter.stackIndex] = secondNode.getKey()
@@ -703,4 +707,4 @@ func (iter *subNodeCachingIterator) cacheWithSecondSubNode(object C) bool {
 	return false
 }
 
-var _ cachingNodeIterator = &subNodeCachingIterator{}
+//var _ cachingNodeIterator = &subNodeCachingIterator{} // TODO need to choose E and V

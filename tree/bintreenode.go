@@ -929,7 +929,7 @@ func nodeString[E Key, V any](node node[E, V]) string {
 	}
 	key := node.getKey()
 	val := node.GetValue()
-	if _, ok := any(val).(EmptyValueType); !ok {
+	if _, ok := any(val).(EmptyValueType); ok {
 		//if val == nil {
 		// TODO this is a problem, need a way of identifying a non-associative trie or trie node
 		// Ooh, I have a good idea, just track if we ever called SetValue, is there any other way of assigning a value?

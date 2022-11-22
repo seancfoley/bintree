@@ -147,7 +147,7 @@ type TrieKeyIterator[E TrieKey[E]] interface {
 	Next() E
 
 	// Remove removes the last iterated element from the underlying trie, and returns that element.
-	// If there is no such element, it returns nil.
+	// If there is no such element, it returns the zero value.
 	Remove() E
 }
 
@@ -183,7 +183,7 @@ type TrieNodeIteratorRem[E TrieKey[E], V any] interface {
 	TrieNodeIterator[E, V]
 
 	// Remove removes the last iterated element from the underlying trie, and returns that element.
-	// If there is no such element, it returns nil.
+	// If there is no such element, it returns the zero value.
 	Remove() *BinTrieNode[E, V]
 }
 
@@ -1469,32 +1469,30 @@ func (node BinTrieNode[E, V]) Format(state fmt.State, verb rune) {
 
 // TrieIncrement returns the next key according to the trie ordering.
 // The zero value is returned when there is no next key.
-func TrieIncrement[E TrieKey[E]](key E) E {
+func TrieIncrement[E TrieKey[E]](key E) (next E, hasNext bool) {
 	prefLen := key.GetPrefixLen()
 	if prefLen != nil {
-		return key.ToMinUpper()
+		return key.ToMinUpper(), true
 	}
 	bitCount := key.GetBitCount()
 	trailingBits := key.GetTrailingBitCount(false)
 	if trailingBits < bitCount {
-		return key.ToPrefixBlockLen(bitCount - (trailingBits + 1))
+		return key.ToPrefixBlockLen(bitCount - (trailingBits + 1)), true
 	}
-	var e E
-	return e
+	return
 }
 
 // TrieDecrement returns the previous key according to the trie ordering
 // The zero value is returned when there is no previous key.
-func TrieDecrement[E TrieKey[E]](key E) E {
+func TrieDecrement[E TrieKey[E]](key E) (next E, hasNext bool) {
 	prefLen := key.GetPrefixLen()
 	if prefLen != nil {
-		return key.ToMaxLower()
+		return key.ToMaxLower(), true
 	}
 	bitCount := key.GetBitCount()
 	trailingBits := key.GetTrailingBitCount(true)
 	if trailingBits < bitCount {
-		return key.ToPrefixBlockLen(bitCount - (trailingBits + 1))
+		return key.ToPrefixBlockLen(bitCount - (trailingBits + 1)), true
 	}
-	var e E
-	return e
+	return
 }

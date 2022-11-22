@@ -18,6 +18,7 @@ package tree
 import (
 	"fmt"
 	"math/big"
+	"reflect"
 	"strconv"
 	"strings"
 	"unsafe"
@@ -921,6 +922,15 @@ type node[E Key, V any] interface {
 	IsAdded() bool
 }
 
+func isNil[V any](v V) bool {
+	valueType := reflect.ValueOf(&v).Elem()
+	switch valueType.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return valueType.IsNil()
+	}
+	return false
+}
+
 // nodeString returns a visual representation of the given node including the key, with an open circle indicating this node is not an added node,
 // a closed circle indicating this node is an added node.
 func nodeString[E Key, V any](node node[E, V]) string {
@@ -929,13 +939,7 @@ func nodeString[E Key, V any](node node[E, V]) string {
 	}
 	key := node.getKey()
 	val := node.GetValue()
-	if _, ok := any(val).(EmptyValueType); ok {
-		//if val == nil {
-		// TODO this is a problem, need a way of identifying a non-associative trie or trie node
-		// Ooh, I have a good idea, just track if we ever called SetValue, is there any other way of assigning a value?
-		// Remap, whatever, as long as we know it has been set
-		// I think the better idea is to use the sentinel value
-
+	if _, ok := any(val).(EmptyValueType); ok || isNil(val) {
 		if node.IsAdded() {
 			return fmt.Sprint(addedNodeCircle, " ", key)
 		}

@@ -199,7 +199,7 @@ func (node *binTreeNode[E, V]) setKey(item E) {
 }
 
 // Gets the key used for placing the node in the tree.
-func (node *binTreeNode[E, V]) getKey() (key E) {
+func (node *binTreeNode[E, V]) GetKey() (key E) {
 	if node != nil {
 		key = node.item
 	}
@@ -449,7 +449,7 @@ func (node *binTreeNode[E, V]) replaceThisRoot(replacement *binTreeNode[E, V]) {
 		node.setNodeAdded(replacement.IsAdded())
 		node.setUpper(replacement.getUpperSubNode())
 		node.setLower(replacement.getLowerSubNode())
-		node.setKey(replacement.getKey())
+		node.setKey(replacement.GetKey())
 		node.storedSize = replacement.storedSize
 		node.SetValue(replacement.GetValue())
 	}
@@ -807,7 +807,7 @@ func (node *binTreeNode[E, V]) nextAdded(end *binTreeNode[E, V], nextOperator fu
 
 func (node *binTreeNode[E, V]) nextInBounds(end *binTreeNode[E, V], nextOperator func(current *binTreeNode[E, V], end *binTreeNode[E, V]) *binTreeNode[E, V], bnds *bounds[E]) *binTreeNode[E, V] {
 	return nextTest(node, end, nextOperator, func(current *binTreeNode[E, V]) bool {
-		return bnds.isInBounds(current.getKey())
+		return bnds.isInBounds(current.GetKey())
 	})
 }
 
@@ -916,8 +916,8 @@ const (
 	belowElbows     = "  "
 )
 
-type node[E Key, V any] interface {
-	getKey() E
+type nodePrinter[E Key, V any] interface {
+	GetKey() E
 	GetValue() V
 	IsAdded() bool
 }
@@ -931,13 +931,13 @@ func isNil[V any](v V) bool {
 	return false
 }
 
-// nodeString returns a visual representation of the given node including the key, with an open circle indicating this node is not an added node,
+// NodeString returns a visual representation of the given node including the key, with an open circle indicating this node is not an added node,
 // a closed circle indicating this node is an added node.
-func nodeString[E Key, V any](node node[E, V]) string {
+func NodeString[E Key, V any](node nodePrinter[E, V]) string {
 	if node == nil {
 		return nilString()
 	}
-	key := node.getKey()
+	key := node.GetKey()
 	val := node.GetValue()
 	if _, ok := any(val).(EmptyValueType); ok || isNil(val) {
 		if node.IsAdded() {
@@ -1036,9 +1036,9 @@ func nilString() string {
 // a closed circle indicating this node is an added node.
 func (node *binTreeNode[E, V]) String() string {
 	if node == nil {
-		return nodeString[E, V](nil)
+		return NodeString[E, V](nil)
 	}
-	return nodeString[E, V](node)
+	return NodeString[E, V](node)
 }
 
 func (node binTreeNode[E, V]) format(state fmt.State, verb rune) {
@@ -1125,10 +1125,10 @@ func (node *binTreeNode[E, V]) cloneTreeTrackerBounds(ctracker *changeTracker, b
 			for {
 				if lower == nil {
 					break
-				} else if bnds.isWithinLowerBound(lower.getKey()) {
+				} else if bnds.isWithinLowerBound(lower.GetKey()) {
 					if !lower.IsAdded() {
 						next := lower.getLowerSubNode()
-						for bnds.isBelowLowerBound(next.getKey()) {
+						for bnds.isBelowLowerBound(next.GetKey()) {
 							next = next.getUpperSubNode()
 							if next == nil {
 								lower = lower.getUpperSubNode()
@@ -1154,10 +1154,10 @@ func (node *binTreeNode[E, V]) cloneTreeTrackerBounds(ctracker *changeTracker, b
 			for {
 				if upper == nil {
 					break
-				} else if bnds.isWithinUpperBound(upper.getKey()) {
+				} else if bnds.isWithinUpperBound(upper.GetKey()) {
 					if !upper.IsAdded() {
 						next := upper.getUpperSubNode()
-						for bnds.isAboveUpperBound(next.getKey()) {
+						for bnds.isAboveUpperBound(next.GetKey()) {
 							next = next.getLowerSubNode()
 							if next == nil {
 								upper = upper.getLowerSubNode()

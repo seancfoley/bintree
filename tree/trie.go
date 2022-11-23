@@ -124,31 +124,456 @@ func (trie *BinTrie[E, V]) TreeString(withNonAddedKeys bool) string {
 	return trie.binTree.TreeString(withNonAddedKeys)
 }
 
-type SubNodesMapping[E TrieKey[E], V any] struct {
-	val V
-
-	// subNodes is a []*BinTrieNode from the same trie of type BinTrie[E, SubNodesMapping[V]] TODO remove
-	// That makes it recursive.  The node value here points to nodes with the same value.
-	// So is why we use the type "any".  We could have used []any but it's better to use just one interface per node.
-	//subNodes any
-
-	// subNodes is the list of direct and indirect added subnodes in the original trie
-	subNodes []*BinTrieNode[E, AddedSubnodeMapping]
-}
-
-type AddedSubnodeMapping any // AddedSubnodeMapping / any is always SubNodesMapping[E,V]
-
-type printWrapper[E TrieKey[E], V any] struct {
-	*BinTrieNode[E, AddedSubnodeMapping]
-}
-
-func (p printWrapper[E, V]) GetValue() V {
-	nodeValue := p.BinTrieNode.GetValue()
-	if nodeValue == nil {
-		var v V
-		return v
+// Add adds the given key to the trie, returning true if not there already.
+func (trie *BinTrie[E, V]) Add(key E) bool {
+	root := trie.ensureRoot(key)
+	result := &opResult[E, V]{
+		key: key,
+		op:  insert,
 	}
-	return nodeValue.(SubNodesMapping[E, V]).val
+	root.matchBits(result)
+	return !result.exists
+}
+
+// AddNode is similar to Add but returns the new or existing node.
+func (trie *BinTrie[E, V]) AddNode(key E) *BinTrieNode[E, V] {
+	root := trie.ensureRoot(key)
+	result := &opResult[E, V]{
+		key: key,
+		op:  insert,
+	}
+	root.matchBits(result)
+	node := result.existingNode
+	if node == nil {
+		node = result.inserted
+	}
+	return node
+}
+
+func (trie *BinTrie[E, V]) addNode(result *opResult[E, V], fromNode *BinTrieNode[E, V]) *BinTrieNode[E, V] {
+	fromNode.matchBitsFromIndex(fromNode.GetKey().GetPrefixLen().Len(), result)
+	node := result.existingNode
+	if node == nil {
+		return result.inserted
+	}
+	return node
+}
+
+func (trie *BinTrie[E, V]) addTrie(addedTree *BinTrieNode[E, V], withValues bool) *BinTrieNode[E, V] {
+	iterator := addedTree.ContainingFirstAllNodeIterator(true)
+	toAdd := iterator.Next()
+	result := &opResult[E, V]{
+		key: toAdd.GetKey(),
+		op:  insert,
+	}
+	var firstNode *BinTrieNode[E, V]
+	root := trie.absoluteRoot()
+	firstAdded := toAdd.IsAdded()
+	if firstAdded {
+		if withValues {
+			result.newValue = toAdd.GetValue()
+			// new value assignment
+		}
+		firstNode = trie.addNode(result, root)
+	} else {
+		firstNode = root
+	}
+	lastAddedNode := firstNode
+	for iterator.HasNext() {
+		iterator.CacheWithLowerSubNode(lastAddedNode)
+		iterator.CacheWithUpperSubNode(lastAddedNode)
+		toAdd = iterator.Next()
+		cachedNode := iterator.GetCached().(*BinTrieNode[E, V])
+		if toAdd.IsAdded() {
+			addrNext := toAdd.GetKey()
+			result.key = addrNext
+			result.existingNode = nil
+			result.inserted = nil
+			if withValues {
+				result.newValue = toAdd.GetValue()
+				// new value assignment
+			}
+			lastAddedNode = trie.addNode(result, cachedNode)
+		} else {
+			lastAddedNode = cachedNode
+		}
+	}
+	if !firstAdded {
+		firstNode = trie.GetNode(addedTree.GetKey())
+	}
+	return firstNode
+}
+
+// AddTrieKeys copies the trie node structure of addedTrie into trie, but does not copy node mapped values
+func AddTrieKeys[E TrieKey[E], V1 any, V2 any](trie *BinTrie[E, V1], addedTree *BinTrieNode[E, V2]) *BinTrieNode[E, V1] {
+	iterator := addedTree.ContainingFirstAllNodeIterator(true)
+	toAdd := iterator.Next()
+	result := &opResult[E, V1]{
+		key: toAdd.GetKey(),
+		op:  insert,
+	}
+	var firstNode *BinTrieNode[E, V1]
+	root := trie.absoluteRoot()
+	firstAdded := toAdd.IsAdded()
+	if firstAdded {
+		firstNode = trie.addNode(result, root)
+	} else {
+		firstNode = root
+	}
+	lastAddedNode := firstNode
+	for iterator.HasNext() {
+		iterator.CacheWithLowerSubNode(lastAddedNode)
+		iterator.CacheWithUpperSubNode(lastAddedNode)
+		toAdd = iterator.Next()
+		cachedNode := iterator.GetCached().(*BinTrieNode[E, V1])
+		if toAdd.IsAdded() {
+			result.key = toAdd.GetKey()
+			result.existingNode = nil
+			result.inserted = nil
+			lastAddedNode = trie.addNode(result, cachedNode)
+		} else {
+			lastAddedNode = cachedNode
+		}
+	}
+	if !firstAdded {
+		firstNode = trie.GetNode(addedTree.GetKey())
+	}
+	return firstNode
+}
+
+func (trie *BinTrie[E, V]) AddTrie(trieNode *BinTrieNode[E, V]) *BinTrieNode[E, V] {
+	if trieNode == nil {
+		return nil
+	}
+	trie.ensureRoot(trieNode.GetKey())
+	return trie.addTrie(trieNode, false)
+}
+
+func (trie *BinTrie[E, V]) Contains(key E) bool {
+	return trie.absoluteRoot().Contains(key)
+}
+
+func (trie *BinTrie[E, V]) Remove(key E) bool {
+	return trie.absoluteRoot().RemoveNode(key)
+}
+
+func (trie *BinTrie[E, V]) RemoveElementsContainedBy(key E) *BinTrieNode[E, V] {
+	return trie.absoluteRoot().RemoveElementsContainedBy(key)
+}
+
+func (trie *BinTrie[E, V]) ElementsContainedBy(key E) *BinTrieNode[E, V] {
+	return trie.absoluteRoot().ElementsContainedBy(key)
+}
+
+func (trie *BinTrie[E, V]) ElementsContaining(key E) *Path[E, V] {
+	return trie.absoluteRoot().ElementsContaining(key)
+}
+
+// LongestPrefixMatch finds the key with the longest matching prefix.
+func (trie *BinTrie[E, V]) LongestPrefixMatch(key E) (E, bool) {
+	return trie.absoluteRoot().LongestPrefixMatch(key)
+}
+
+// LongestPrefixMatchNode finds the node with the longest matching prefix.
+func (trie *BinTrie[E, V]) LongestPrefixMatchNode(key E) *BinTrieNode[E, V] {
+	return trie.absoluteRoot().LongestPrefixMatchNode(key)
+}
+
+func (trie *BinTrie[E, V]) ElementContains(key E) bool {
+	return trie.absoluteRoot().ElementContains(key)
+}
+
+// GetNode gets the node in the sub-trie corresponding to the given address,
+// or returns nil if not such element exists.
+//
+// It returns any node, whether added or not,
+// including any prefix block node that was not added.
+func (trie *BinTrie[E, V]) GetNode(key E) *BinTrieNode[E, V] {
+	return trie.absoluteRoot().GetNode(key)
+}
+
+// GetAddedNode gets trie nodes representing added elements.
+//
+// Use Contains to check for the existence of a given address in the trie,
+// as well as GetNode to search for all nodes including those not-added but also auto-generated nodes for subnet blocks.
+func (trie *BinTrie[E, V]) GetAddedNode(key E) *BinTrieNode[E, V] {
+	return trie.absoluteRoot().GetAddedNode(key)
+}
+
+// Put associates the specified value with the specified key in this map.
+//
+// If the argument is not a single address nor prefix block, this method will panic.
+// The Partition type can be used to convert the argument to single addresses and prefix blocks before calling this method.
+//
+// If this map previously contained a mapping for a key,
+// the old value is replaced by the specified value, and false is returned along with the old value, which may be the zero value.
+// If this map did not previously contain a mapping for the key, true is returned along with the zero value.
+func (trie *BinTrie[E, V]) Put(key E, value V) (V, bool) {
+	root := trie.ensureRoot(key)
+	result := &opResult[E, V]{
+		key:      key,
+		op:       insert,
+		newValue: value,
+		// new value assignment
+	}
+	root.matchBits(result)
+	return result.existingValue, !result.exists
+}
+
+func (trie *BinTrie[E, V]) PutTrie(trieNode *BinTrieNode[E, V]) *BinTrieNode[E, V] {
+	if trieNode == nil {
+		return nil
+	}
+	trie.ensureRoot(trieNode.GetKey())
+	return trie.addTrie(trieNode, true)
+}
+
+func (trie *BinTrie[E, V]) PutNode(key E, value V) *BinTrieNode[E, V] {
+	root := trie.ensureRoot(key)
+	result := &opResult[E, V]{
+		key:      key,
+		op:       insert,
+		newValue: value,
+		// new value assignment
+	}
+	root.matchBits(result)
+	resultNode := result.existingNode
+	if resultNode == nil {
+		resultNode = result.inserted
+	}
+	return resultNode
+}
+
+func (trie *BinTrie[E, V]) Remap(key E, remapper func(existing V, found bool) (mapped V, mapIt bool)) *BinTrieNode[E, V] {
+	return trie.remapImpl(key,
+		func(existingVal V, exists bool) (V, remapAction) {
+			result, mapIt := remapper(existingVal, exists)
+			if mapIt {
+				return result, remapValue
+			}
+			var v V
+			//if !exists { no need for this, the remap function handles it already, it ignores removeNode when no match
+			//	return v, doNothing
+			//}
+			return v, removeNode
+		})
+}
+
+/*
+func (trie *AssociativeTrie[T, V]) Remap(addr T, remapper func(existing V, found bool) (mapped V, mapIt bool)) *AssociativeTrieNode[T, V] {
+	addr = mustBeBlockOrAddress(addr)
+	//return toAssociativeTrieNode[T, V](trie.trieBase.trie.Remap(trieKey[T]{addr}, remapper)) // TODO reinstate once remapper is all we need, which is when bintree goes generic
+	return toAssociativeTrieNode[T, V](trie.trieBase.trie.Remap(trieKey[T]{addr}, func(t tree.V) tree.V {
+		var res bool
+		var val V
+		if t == nil {
+			val, res = remapper(val, false)
+		} else {
+			val, res = remapper(t.(V), true)
+		}
+		if !res {
+			return nil
+		}
+		return val
+	}))
+}
+*/
+
+func (trie *BinTrie[E, V]) RemapIfAbsent(key E, supplier func() V) *BinTrieNode[E, V] {
+	return trie.remapImpl(key,
+		func(existingVal V, exists bool) (V, remapAction) {
+			if !exists {
+				return supplier(), remapValue
+			}
+			var v V
+			return v, doNothing
+		})
+}
+
+/*
+func (trie *AssociativeTrie[T, V]) RemapIfAbsent(addr T, supplier func() (V, bool)) *AssociativeTrieNode[T, V] {
+	addr = mustBeBlockOrAddress(addr)
+	//return toAssociativeTrieNode[T, V](trie.trieBase.trie.RemapIfAbsent(trieKey[T]{addr}, supplier)) // TODO reinstate once bintree uses generics too,  remapper is all we need
+	return toAssociativeTrieNode[T, V](trie.trieBase.trie.RemapIfAbsent(trieKey[T]{addr}, func() tree.V {
+		val, res := supplier()
+		if !res {
+			return nil
+		}
+		return val
+	}, false))
+}
+*/
+/*
+// RemapIfAbsent remaps node values in the trie, but only for nodes that do not exist or are mapped to nil.
+//
+// This will look up the node corresponding to the given key.
+// If the node is not found or mapped to nil, this will call the remapping function.
+//
+// If the remapping function returns a non-nil value, then it will either set the existing node to have that value,
+// or if there was no matched node, it will create a new node with that value.
+// If the remapping function returns nil, then it will do the same if insertNil is true, otherwise it will do nothing.
+//
+// The method will return the node involved, which is either the matched node, or the newly created node,
+// or nil if there was no matched node nor newly created node.
+//
+// If the remapping function modifies the trie during its computation,
+// and the returned value specifies changes to be made,
+// then the trie will not be changed and ConcurrentModificationException will be thrown instead.
+//
+// If the argument is not a single address nor prefix block, this method will panic.
+// The Partition type can be used to convert the argument to single addresses and prefix blocks before calling this method.
+//
+// insertNull indicates whether nil values returned from remapper should be inserted into the map, or whether nil values indicate no remapping
+func (trie *AssociativeAddressTrie) RemapIfAbsent(addr *Address, supplier func() NodeValue, insertNil bool) *AssociativeAddressTrieNode {
+	return trie.remapIfAbsent(addr, supplier, insertNil)
+}
+*/
+
+func (trie *BinTrie[E, V]) remapImpl(key E, remapper func(val V, exists bool) (V, remapAction)) *BinTrieNode[E, V] {
+	root := trie.ensureRoot(key)
+	result := &opResult[E, V]{
+		key:      key,
+		op:       remap,
+		remapper: remapper,
+	}
+	root.matchBits(result)
+	resultNode := result.existingNode
+	if resultNode == nil {
+		resultNode = result.inserted
+	}
+	return resultNode
+}
+
+func (trie *BinTrie[E, V]) Get(key E) (V, bool) {
+	return trie.absoluteRoot().Get(key)
+}
+
+// NodeIterator returns an iterator that iterates through the added nodes of the trie in forward or reverse tree order.
+func (trie *BinTrie[E, V]) NodeIterator(forward bool) TrieNodeIteratorRem[E, V] {
+	return trie.absoluteRoot().NodeIterator(forward)
+}
+
+// AllNodeIterator returns an iterator that iterates through all the nodes of the trie in forward or reverse tree order.
+func (trie *BinTrie[E, V]) AllNodeIterator(forward bool) TrieNodeIteratorRem[E, V] {
+	return trie.absoluteRoot().AllNodeIterator(forward)
+}
+
+// BlockSizeNodeIterator returns an iterator that iterates the added nodes in the trie, ordered by keys from largest prefix blocks to smallest, and then to individual addresses.
+//
+// If lowerSubNodeFirst is true, for blocks of equal size the lower is first, otherwise the reverse order
+func (trie *BinTrie[E, V]) BlockSizeNodeIterator(lowerSubNodeFirst bool) TrieNodeIteratorRem[E, V] {
+	return trie.absoluteRoot().BlockSizeNodeIterator(lowerSubNodeFirst)
+}
+
+// BlockSizeAllNodeIterator returns an iterator that iterates all nodes in the trie, ordered by keys from largest prefix blocks to smallest, and then to individual addresses.
+//
+// If lowerSubNodeFirst is true, for blocks of equal size the lower is first, otherwise the reverse order
+func (trie *BinTrie[E, V]) BlockSizeAllNodeIterator(lowerSubNodeFirst bool) TrieNodeIteratorRem[E, V] {
+	return trie.absoluteRoot().BlockSizeAllNodeIterator(lowerSubNodeFirst)
+}
+
+// BlockSizeCachingAllNodeIterator returns an iterator that iterates all nodes, ordered by keys from largest prefix blocks to smallest, and then to individual addresses.
+func (trie *BinTrie[E, V]) BlockSizeCachingAllNodeIterator() CachingTrieNodeIterator[E, V] {
+	return trie.absoluteRoot().BlockSizeCachingAllNodeIterator()
+}
+
+func (trie *BinTrie[E, V]) ContainingFirstIterator(forwardSubNodeOrder bool) CachingTrieNodeIterator[E, V] {
+	return trie.absoluteRoot().ContainingFirstIterator(forwardSubNodeOrder)
+}
+
+func (trie *BinTrie[E, V]) ContainingFirstAllNodeIterator(forwardSubNodeOrder bool) CachingTrieNodeIterator[E, V] {
+	return trie.absoluteRoot().ContainingFirstAllNodeIterator(forwardSubNodeOrder)
+}
+
+func (trie *BinTrie[E, V]) ContainedFirstIterator(forwardSubNodeOrder bool) TrieNodeIteratorRem[E, V] {
+	return trie.absoluteRoot().ContainedFirstIterator(forwardSubNodeOrder)
+}
+
+func (trie *BinTrie[E, V]) ContainedFirstAllNodeIterator(forwardSubNodeOrder bool) TrieNodeIterator[E, V] {
+	return trie.absoluteRoot().ContainedFirstAllNodeIterator(forwardSubNodeOrder)
+}
+
+func (trie *BinTrie[E, V]) FirstNode() *BinTrieNode[E, V] {
+	return trie.absoluteRoot().FirstNode()
+}
+
+func (trie *BinTrie[E, V]) FirstAddedNode() *BinTrieNode[E, V] {
+	return trie.absoluteRoot().FirstAddedNode()
+}
+
+func (trie *BinTrie[E, V]) LastNode() *BinTrieNode[E, V] {
+	return trie.absoluteRoot().LastNode()
+}
+
+func (trie *BinTrie[E, V]) LastAddedNode() *BinTrieNode[E, V] {
+	return trie.absoluteRoot().LastAddedNode()
+}
+
+func (trie *BinTrie[E, V]) LowerAddedNode(key E) *BinTrieNode[E, V] {
+	return trie.absoluteRoot().LowerAddedNode(key)
+}
+
+func (trie *BinTrie[E, V]) FloorAddedNode(key E) *BinTrieNode[E, V] {
+	return trie.absoluteRoot().FloorAddedNode(key)
+}
+
+func (trie *BinTrie[E, V]) HigherAddedNode(key E) *BinTrieNode[E, V] {
+	return trie.absoluteRoot().HigherAddedNode(key)
+}
+
+func (trie *BinTrie[E, V]) CeilingAddedNode(key E) *BinTrieNode[E, V] {
+	return trie.absoluteRoot().CeilingAddedNode(key)
+}
+
+func (trie *BinTrie[E, V]) Clone() *BinTrie[E, V] {
+	if trie == nil {
+		return nil
+	}
+	return &BinTrie[E, V]{binTree[E, V]{root: trie.absoluteRoot().CloneTree().toBinTreeNode()}}
+}
+
+// DeepEqual returns whether the given argument is a trie with a set of nodes with the same keys as in this trie according to the Compare method,
+// and the same values according to the reflect.DeepEqual method
+func (trie *BinTrie[E, V]) DeepEqual(other *BinTrie[E, V]) bool {
+	return trie.absoluteRoot().TreeDeepEqual(other.absoluteRoot())
+}
+
+// Equal returns whether the given argument is a trie with a set of nodes with the same keys as in this trie according to the Compare method
+func (trie *BinTrie[E, V]) Equal(other *BinTrie[E, V]) bool {
+	return trie.absoluteRoot().TreeEqual(other.absoluteRoot())
+}
+
+// For some reason Format must be here and not in addressTrieNode for nil node.
+// It panics in fmt code either way, but if in here then it is handled by a recover() call in fmt properly.
+// Seems to be a problem only in the debugger.
+
+// Format implements the fmt.Formatter interface
+func (trie BinTrie[E, V]) Format(state fmt.State, verb rune) {
+	trie.format(state, verb)
+}
+
+// NewBinTrie creates a new trie with root key.ToPrefixBlockLen(0).
+// If the key argument is not Equal to its zero-length prefix block, then the key will be added as well.
+func NewBinTrie[E TrieKey[E], V any](key E) BinTrie[E, V] {
+	trie := BinTrie[E, V]{binTree[E, V]{}}
+	root := key.ToPrefixBlockLen(0)
+	trie.setRoot(root)
+	if key.Compare(root) != 0 {
+		trie.Add(key)
+	}
+	return trie
+}
+
+func TreesString[E TrieKey[E], V any](withNonAddedKeys bool, tries ...*BinTrie[E, V]) string {
+	binTrees := make([]*binTree[E, V], 0, len(tries))
+	for _, trie := range tries {
+		binTrees = append(binTrees, tobinTree(trie))
+	}
+	return treesString(withNonAddedKeys, binTrees...)
+}
+
+func tobinTree[E TrieKey[E], V any](trie *BinTrie[E, V]) *binTree[E, V] {
+	return (*binTree[E, V])(unsafe.Pointer(trie))
 }
 
 // ConstructAddedNodesTree provides an associative trie in which the root and each added node of this trie are mapped to a list of their respective direct added sub-nodes.
@@ -166,23 +591,23 @@ func (trie *BinTrie[E, V]) ConstructAddedNodesTree() BinTrie[E, AddedSubnodeMapp
 	if trie.root.IsAdded() {
 		newRoot.SetAdded()
 	}
-	emptyTrie := BinTrie[E, AddedSubnodeMapping]{binTree[E, AddedSubnodeMapping]{newRoot}}
+	newTrie := BinTrie[E, AddedSubnodeMapping]{binTree[E, AddedSubnodeMapping]{newRoot}}
 
 	// populate the keys from the original trie into the new trie
-	AddTrieKeys(&emptyTrie, trie.absoluteRoot())
+	AddTrieKeys(&newTrie, trie.absoluteRoot())
 
 	// now, as we iterate,
 	// we find our parent and add ourselves to that parent's list of subnodes
 
 	var cachingIterator CachingTrieNodeIterator[E, AddedSubnodeMapping]
-	cachingIterator = emptyTrie.ContainingFirstAllNodeIterator(true)
+	cachingIterator = newTrie.ContainingFirstAllNodeIterator(true)
 	thisIterator := trie.ContainingFirstAllNodeIterator(true)
 	var newNext *BinTrieNode[E, AddedSubnodeMapping]
 	var thisNext *BinTrieNode[E, V]
 	for newNext, thisNext = cachingIterator.Next(), thisIterator.Next(); newNext != nil; newNext, thisNext = cachingIterator.Next(), thisIterator.Next() {
 
 		// populate the values from the original trie into the new trie
-		newNext.SetValue(SubNodesMapping[E, V]{val: thisNext.GetValue()})
+		newNext.SetValue(SubNodesMapping[E, V]{Value: thisNext.GetValue()})
 
 		cachingIterator.CacheWithLowerSubNode(newNext)
 		cachingIterator.CacheWithUpperSubNode(newNext)
@@ -205,22 +630,17 @@ func (trie *BinTrie[E, V]) ConstructAddedNodesTree() BinTrie[E, AddedSubnodeMapp
 				var val SubNodesMapping[E, V]
 				val = parent.GetValue().(SubNodesMapping[E, V])
 				var list []*BinTrieNode[E, AddedSubnodeMapping]
-				if val.subNodes == nil {
+				if val.SubNodes == nil {
 					list = make([]*BinTrieNode[E, AddedSubnodeMapping], 0, 3)
 				} else {
-					list = val.subNodes
+					list = val.SubNodes
 				}
-				val.subNodes = append(list, newNext)
+				val.SubNodes = append(list, newNext)
 				parent.SetValue(val)
 			} // else root
 		}
 	}
-	return emptyTrie
-}
-
-type indentsNode[E TrieKey[E]] struct {
-	inds indents
-	node *BinTrieNode[E, AddedSubnodeMapping]
+	return newTrie
 }
 
 // AddedNodesTreeString provides a flattened version of the trie showing only the contained added nodes and their containment structure, which is non-binary.
@@ -229,8 +649,19 @@ func (trie *BinTrie[E, V]) AddedNodesTreeString() string {
 	if trie == nil {
 		return "\n" + nilString()
 	}
+	addedTree := trie.ConstructAddedNodesTree() //xxxxx can I make this an arg? xxxx  or can I do the same with a public func?
+	return AddedNodesTreeString[E, V](addedTree)
+}
 
-	addedTree := trie.ConstructAddedNodesTree()
+// AddedNodesTreeString provides a flattened version of the trie showing only the contained added nodes and their containment structure, which is non-binary.
+// The root node is included, which may or may not be added.
+func AddedNodesTreeString[E TrieKey[E], V any](addedTree BinTrie[E, AddedSubnodeMapping]) string {
+	//if trie == nil {
+	//	return "\n" + nilString()
+	//}
+
+	//addedTree := trie.ConstructAddedNodesTree() xxxxx can I make this an arg? xxxx  or can I do the same with a public func?
+
 	var stack []indentsNode[E]
 	var root, nextNode *BinTrieNode[E, AddedSubnodeMapping]
 	root = addedTree.absoluteRoot()
@@ -240,7 +671,8 @@ func (trie *BinTrie[E, V]) AddedNodesTreeString() string {
 	nextNode = root
 	for {
 		builder.WriteString(nodeIndent)
-		builder.WriteString(nodeString[E, V](printWrapper[E, V]{nextNode}))
+		//xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+		builder.WriteString(NodeString[E, V](printWrapper[E, V]{nextNode}))
 		builder.WriteByte('\n')
 
 		var nextVal AddedSubnodeMapping // SubNodesMapping[E, V]
@@ -249,8 +681,8 @@ func (trie *BinTrie[E, V]) AddedNodesTreeString() string {
 		//var nextNodes []*BinTrieNode[E, SubNodesMapping[E, V]]
 		if nextVal != nil {
 			mapping := nextVal.(SubNodesMapping[E, V])
-			if mapping.subNodes != nil {
-				nextNodes = mapping.subNodes
+			if mapping.SubNodes != nil {
+				nextNodes = mapping.SubNodes
 			}
 		}
 		if len(nextNodes) > 0 {
@@ -426,7 +858,7 @@ func (trie *BinTrie[E, V]) AddedNodesTreeString() string {
 //	nextNode = root
 //	for {
 //		builder.WriteString(nodeIndent)
-//		builder.WriteString(nodeString[E, V](printWrapper[E, V]{nextNode}))
+//		builder.WriteString(NodeString[E, V](printWrapper[E, V]{nextNode}))
 //
 //		//xxxx
 //		//if nextNode.IsAdded() {
@@ -435,7 +867,7 @@ func (trie *BinTrie[E, V]) AddedNodesTreeString() string {
 //		//	builder.WriteString(nonAddedNodeCircle)
 //		//}
 //		//builder.WriteByte(' ')
-//		//builder.WriteString(fmt.Sprint(nextNode.GetKey())) xxxxxxxxxx see nodeString xxxxxx
+//		//builder.WriteString(fmt.Sprint(nextNode.GetKey())) xxxxxxxxxx see NodeString xxxxxx
 //		//xxxx
 //
 //		builder.WriteByte('\n')
@@ -887,455 +1319,34 @@ It must have a simple node type, any
 //	return builder.String()
 //}
 
-// Add adds the given key to the trie, returning true if not there already.
-func (trie *BinTrie[E, V]) Add(key E) bool {
-	root := trie.ensureRoot(key)
-	result := &opResult[E, V]{
-		key: key,
-		op:  insert,
+type SubNodesMapping[E TrieKey[E], V any] struct {
+	Value V
+
+	// subNodes is a []*BinTrieNode from the same trie of type BinTrie[E, SubNodesMapping[V]] TODO remove
+	// That makes it recursive.  The node value here points to nodes with the same value.
+	// So is why we use the type "any".  We could have used []any but it's better to use just one interface per node.
+	//subNodes any
+
+	// subNodes is the list of direct and indirect added subnodes in the original trie
+	SubNodes []*BinTrieNode[E, AddedSubnodeMapping]
+}
+
+type AddedSubnodeMapping any // AddedSubnodeMapping / any is always SubNodesMapping[E,V]
+
+type printWrapper[E TrieKey[E], V any] struct {
+	*BinTrieNode[E, AddedSubnodeMapping]
+}
+
+func (p printWrapper[E, V]) GetValue() V {
+	var nodeValue AddedSubnodeMapping = p.BinTrieNode.GetValue()
+	if nodeValue == nil {
+		var v V
+		return v
 	}
-	root.matchBits(result)
-	return !result.exists
+	return nodeValue.(SubNodesMapping[E, V]).Value
 }
 
-// AddNode is similar to Add but returns the new or existing node.
-func (trie *BinTrie[E, V]) AddNode(key E) *BinTrieNode[E, V] {
-	root := trie.ensureRoot(key)
-	result := &opResult[E, V]{
-		key: key,
-		op:  insert,
-	}
-	root.matchBits(result)
-	node := result.existingNode
-	if node == nil {
-		node = result.inserted
-	}
-	return node
-}
-
-func (trie *BinTrie[E, V]) addNode(result *opResult[E, V], fromNode *BinTrieNode[E, V]) *BinTrieNode[E, V] {
-	fromNode.matchBitsFromIndex(fromNode.GetKey().GetPrefixLen().Len(), result)
-	node := result.existingNode
-	if node == nil {
-		return result.inserted
-	}
-	return node
-}
-
-func (trie *BinTrie[E, V]) addTrie(addedTree *BinTrieNode[E, V], withValues bool) *BinTrieNode[E, V] {
-	iterator := addedTree.ContainingFirstAllNodeIterator(true)
-	toAdd := iterator.Next()
-	result := &opResult[E, V]{
-		key: toAdd.GetKey(),
-		op:  insert,
-	}
-	var firstNode *BinTrieNode[E, V]
-	root := trie.absoluteRoot()
-	firstAdded := toAdd.IsAdded()
-	if firstAdded {
-		if withValues {
-			result.newValue = toAdd.GetValue()
-			// new value assignment
-		}
-		firstNode = trie.addNode(result, root)
-	} else {
-		firstNode = root
-	}
-	lastAddedNode := firstNode
-	for iterator.HasNext() {
-		iterator.CacheWithLowerSubNode(lastAddedNode)
-		iterator.CacheWithUpperSubNode(lastAddedNode)
-		toAdd = iterator.Next()
-		cachedNode := iterator.GetCached().(*BinTrieNode[E, V])
-		if toAdd.IsAdded() {
-			addrNext := toAdd.GetKey()
-			result.key = addrNext
-			result.existingNode = nil
-			result.inserted = nil
-			if withValues {
-				result.newValue = toAdd.GetValue()
-				// new value assignment
-			}
-			lastAddedNode = trie.addNode(result, cachedNode)
-		} else {
-			lastAddedNode = cachedNode
-		}
-	}
-	if !firstAdded {
-		firstNode = trie.GetNode(addedTree.GetKey())
-	}
-	return firstNode
-}
-
-// AddTrieKeys copies the trie node structure of addedTrie into trie, but does not copy node mapped values
-func AddTrieKeys[E TrieKey[E], V1 any, V2 any](trie *BinTrie[E, V1], addedTree *BinTrieNode[E, V2]) *BinTrieNode[E, V1] {
-	iterator := addedTree.ContainingFirstAllNodeIterator(true)
-	toAdd := iterator.Next()
-	result := &opResult[E, V1]{
-		key: toAdd.GetKey(),
-		op:  insert,
-	}
-	var firstNode *BinTrieNode[E, V1]
-	root := trie.absoluteRoot()
-	firstAdded := toAdd.IsAdded()
-	if firstAdded {
-		firstNode = trie.addNode(result, root)
-	} else {
-		firstNode = root
-	}
-	lastAddedNode := firstNode
-	for iterator.HasNext() {
-		iterator.CacheWithLowerSubNode(lastAddedNode)
-		iterator.CacheWithUpperSubNode(lastAddedNode)
-		toAdd = iterator.Next()
-		cachedNode := iterator.GetCached().(*BinTrieNode[E, V1])
-		if toAdd.IsAdded() {
-			result.key = toAdd.GetKey()
-			result.existingNode = nil
-			result.inserted = nil
-			lastAddedNode = trie.addNode(result, cachedNode)
-		} else {
-			lastAddedNode = cachedNode
-		}
-	}
-	if !firstAdded {
-		firstNode = trie.GetNode(addedTree.GetKey())
-	}
-	return firstNode
-}
-
-func (trie *BinTrie[E, V]) AddTrie(trieNode *BinTrieNode[E, V]) *BinTrieNode[E, V] {
-	if trieNode == nil {
-		return nil
-	}
-	trie.ensureRoot(trieNode.GetKey())
-	return trie.addTrie(trieNode, false)
-}
-
-func (trie *BinTrie[E, V]) Contains(key E) bool {
-	return trie.absoluteRoot().Contains(key)
-}
-
-func (trie *BinTrie[E, V]) Remove(key E) bool {
-	return trie.absoluteRoot().RemoveNode(key)
-}
-
-func (trie *BinTrie[E, V]) RemoveElementsContainedBy(key E) *BinTrieNode[E, V] {
-	return trie.absoluteRoot().RemoveElementsContainedBy(key)
-}
-
-func (trie *BinTrie[E, V]) ElementsContainedBy(key E) *BinTrieNode[E, V] {
-	return trie.absoluteRoot().ElementsContainedBy(key)
-}
-
-func (trie *BinTrie[E, V]) ElementsContaining(key E) *Path[E, V] {
-	return trie.absoluteRoot().ElementsContaining(key)
-}
-
-// LongestPrefixMatch finds the key with the longest matching prefix.
-func (trie *BinTrie[E, V]) LongestPrefixMatch(key E) (E, bool) {
-	return trie.absoluteRoot().LongestPrefixMatch(key)
-}
-
-// LongestPrefixMatchNode finds the node with the longest matching prefix.
-func (trie *BinTrie[E, V]) LongestPrefixMatchNode(key E) *BinTrieNode[E, V] {
-	return trie.absoluteRoot().LongestPrefixMatchNode(key)
-}
-
-func (trie *BinTrie[E, V]) ElementContains(key E) bool {
-	return trie.absoluteRoot().ElementContains(key)
-}
-
-// GetNode gets the node in the sub-trie corresponding to the given address,
-// or returns nil if not such element exists.
-//
-// It returns any node, whether added or not,
-// including any prefix block node that was not added.
-func (trie *BinTrie[E, V]) GetNode(key E) *BinTrieNode[E, V] {
-	return trie.absoluteRoot().GetNode(key)
-}
-
-// GetAddedNode gets trie nodes representing added elements.
-//
-// Use Contains to check for the existence of a given address in the trie,
-// as well as GetNode to search for all nodes including those not-added but also auto-generated nodes for subnet blocks.
-func (trie *BinTrie[E, V]) GetAddedNode(key E) *BinTrieNode[E, V] {
-	return trie.absoluteRoot().GetAddedNode(key)
-}
-
-// Put associates the specified value with the specified key in this map.
-//
-// If the argument is not a single address nor prefix block, this method will panic.
-// The Partition type can be used to convert the argument to single addresses and prefix blocks before calling this method.
-//
-// If this map previously contained a mapping for a key,
-// the old value is replaced by the specified value, and false is returned along with the old value.
-// If this map did not previously contain a mapping for the key, true is returned along with nil.
-// The boolean return value allows you to distinguish whether the key was previously mapped to nil or not mapped at all.
-func (trie *BinTrie[E, V]) Put(key E, value V) (V, bool) {
-	root := trie.ensureRoot(key)
-	result := &opResult[E, V]{
-		key:      key,
-		op:       insert,
-		newValue: value,
-		// new value assignment
-	}
-	root.matchBits(result)
-	return result.existingValue, !result.exists
-}
-
-func (trie *BinTrie[E, V]) PutTrie(trieNode *BinTrieNode[E, V]) *BinTrieNode[E, V] {
-	if trieNode == nil {
-		return nil
-	}
-	trie.ensureRoot(trieNode.GetKey())
-	return trie.addTrie(trieNode, true)
-}
-
-func (trie *BinTrie[E, V]) PutNode(key E, value V) *BinTrieNode[E, V] {
-	root := trie.ensureRoot(key)
-	result := &opResult[E, V]{
-		key:      key,
-		op:       insert,
-		newValue: value,
-		// new value assignment
-	}
-	root.matchBits(result)
-	resultNode := result.existingNode
-	if resultNode == nil {
-		resultNode = result.inserted
-	}
-	return resultNode
-}
-
-func (trie *BinTrie[E, V]) Remap(key E, remapper func(existing V, found bool) (mapped V, mapIt bool)) *BinTrieNode[E, V] {
-	return trie.remapImpl(key,
-		func(existingVal V, exists bool) (V, remapAction) {
-			result, mapIt := remapper(existingVal, exists)
-			if mapIt {
-				return result, remapValue
-			}
-			var v V
-			//if !exists { no need for this, the remap function handles it already, it ignores removeNode when no match
-			//	return v, doNothing
-			//}
-			return v, removeNode
-		})
-}
-
-/*
-func (trie *AssociativeTrie[T, V]) Remap(addr T, remapper func(existing V, found bool) (mapped V, mapIt bool)) *AssociativeTrieNode[T, V] {
-	addr = mustBeBlockOrAddress(addr)
-	//return toAssociativeTrieNode[T, V](trie.trieBase.trie.Remap(trieKey[T]{addr}, remapper)) // TODO reinstate once remapper is all we need, which is when bintree goes generic
-	return toAssociativeTrieNode[T, V](trie.trieBase.trie.Remap(trieKey[T]{addr}, func(t tree.V) tree.V {
-		var res bool
-		var val V
-		if t == nil {
-			val, res = remapper(val, false)
-		} else {
-			val, res = remapper(t.(V), true)
-		}
-		if !res {
-			return nil
-		}
-		return val
-	}))
-}
-*/
-
-func (trie *BinTrie[E, V]) RemapIfAbsent(key E, supplier func() V) *BinTrieNode[E, V] {
-	return trie.remapImpl(key,
-		func(existingVal V, exists bool) (V, remapAction) {
-			if !exists {
-				return supplier(), remapValue
-			}
-			var v V
-			return v, doNothing
-		})
-}
-
-/*
-func (trie *AssociativeTrie[T, V]) RemapIfAbsent(addr T, supplier func() (V, bool)) *AssociativeTrieNode[T, V] {
-	addr = mustBeBlockOrAddress(addr)
-	//return toAssociativeTrieNode[T, V](trie.trieBase.trie.RemapIfAbsent(trieKey[T]{addr}, supplier)) // TODO reinstate once bintree uses generics too,  remapper is all we need
-	return toAssociativeTrieNode[T, V](trie.trieBase.trie.RemapIfAbsent(trieKey[T]{addr}, func() tree.V {
-		val, res := supplier()
-		if !res {
-			return nil
-		}
-		return val
-	}, false))
-}
-*/
-/*
-// RemapIfAbsent remaps node values in the trie, but only for nodes that do not exist or are mapped to nil.
-//
-// This will look up the node corresponding to the given key.
-// If the node is not found or mapped to nil, this will call the remapping function.
-//
-// If the remapping function returns a non-nil value, then it will either set the existing node to have that value,
-// or if there was no matched node, it will create a new node with that value.
-// If the remapping function returns nil, then it will do the same if insertNil is true, otherwise it will do nothing.
-//
-// The method will return the node involved, which is either the matched node, or the newly created node,
-// or nil if there was no matched node nor newly created node.
-//
-// If the remapping function modifies the trie during its computation,
-// and the returned value specifies changes to be made,
-// then the trie will not be changed and ConcurrentModificationException will be thrown instead.
-//
-// If the argument is not a single address nor prefix block, this method will panic.
-// The Partition type can be used to convert the argument to single addresses and prefix blocks before calling this method.
-//
-// insertNull indicates whether nil values returned from remapper should be inserted into the map, or whether nil values indicate no remapping
-func (trie *AssociativeAddressTrie) RemapIfAbsent(addr *Address, supplier func() NodeValue, insertNil bool) *AssociativeAddressTrieNode {
-	return trie.remapIfAbsent(addr, supplier, insertNil)
-}
-*/
-
-func (trie *BinTrie[E, V]) remapImpl(key E, remapper func(val V, exists bool) (V, remapAction)) *BinTrieNode[E, V] {
-	root := trie.ensureRoot(key)
-	result := &opResult[E, V]{
-		key:      key,
-		op:       remap,
-		remapper: remapper,
-	}
-	root.matchBits(result)
-	resultNode := result.existingNode
-	if resultNode == nil {
-		resultNode = result.inserted
-	}
-	return resultNode
-}
-
-func (trie *BinTrie[E, V]) Get(key E) (V, bool) {
-	return trie.absoluteRoot().Get(key)
-}
-
-// NodeIterator returns an iterator that iterates through the added nodes of the trie in forward or reverse tree order.
-func (trie *BinTrie[E, V]) NodeIterator(forward bool) TrieNodeIteratorRem[E, V] {
-	return trie.absoluteRoot().NodeIterator(forward)
-}
-
-// AllNodeIterator returns an iterator that iterates through all the nodes of the trie in forward or reverse tree order.
-func (trie *BinTrie[E, V]) AllNodeIterator(forward bool) TrieNodeIteratorRem[E, V] {
-	return trie.absoluteRoot().AllNodeIterator(forward)
-}
-
-// BlockSizeNodeIterator returns an iterator that iterates the added nodes in the trie, ordered by keys from largest prefix blocks to smallest, and then to individual addresses.
-//
-// If lowerSubNodeFirst is true, for blocks of equal size the lower is first, otherwise the reverse order
-func (trie *BinTrie[E, V]) BlockSizeNodeIterator(lowerSubNodeFirst bool) TrieNodeIteratorRem[E, V] {
-	return trie.absoluteRoot().BlockSizeNodeIterator(lowerSubNodeFirst)
-}
-
-// BlockSizeAllNodeIterator returns an iterator that iterates all nodes in the trie, ordered by keys from largest prefix blocks to smallest, and then to individual addresses.
-//
-// If lowerSubNodeFirst is true, for blocks of equal size the lower is first, otherwise the reverse order
-func (trie *BinTrie[E, V]) BlockSizeAllNodeIterator(lowerSubNodeFirst bool) TrieNodeIteratorRem[E, V] {
-	return trie.absoluteRoot().BlockSizeAllNodeIterator(lowerSubNodeFirst)
-}
-
-// BlockSizeCachingAllNodeIterator returns an iterator that iterates all nodes, ordered by keys from largest prefix blocks to smallest, and then to individual addresses.
-func (trie *BinTrie[E, V]) BlockSizeCachingAllNodeIterator() CachingTrieNodeIterator[E, V] {
-	return trie.absoluteRoot().BlockSizeCachingAllNodeIterator()
-}
-
-func (trie *BinTrie[E, V]) ContainingFirstIterator(forwardSubNodeOrder bool) CachingTrieNodeIterator[E, V] {
-	return trie.absoluteRoot().ContainingFirstIterator(forwardSubNodeOrder)
-}
-
-func (trie *BinTrie[E, V]) ContainingFirstAllNodeIterator(forwardSubNodeOrder bool) CachingTrieNodeIterator[E, V] {
-	return trie.absoluteRoot().ContainingFirstAllNodeIterator(forwardSubNodeOrder)
-}
-
-func (trie *BinTrie[E, V]) ContainedFirstIterator(forwardSubNodeOrder bool) TrieNodeIteratorRem[E, V] {
-	return trie.absoluteRoot().ContainedFirstIterator(forwardSubNodeOrder)
-}
-
-func (trie *BinTrie[E, V]) ContainedFirstAllNodeIterator(forwardSubNodeOrder bool) TrieNodeIterator[E, V] {
-	return trie.absoluteRoot().ContainedFirstAllNodeIterator(forwardSubNodeOrder)
-}
-
-func (trie *BinTrie[E, V]) FirstNode() *BinTrieNode[E, V] {
-	return trie.absoluteRoot().FirstNode()
-}
-
-func (trie *BinTrie[E, V]) FirstAddedNode() *BinTrieNode[E, V] {
-	return trie.absoluteRoot().FirstAddedNode()
-}
-
-func (trie *BinTrie[E, V]) LastNode() *BinTrieNode[E, V] {
-	return trie.absoluteRoot().LastNode()
-}
-
-func (trie *BinTrie[E, V]) LastAddedNode() *BinTrieNode[E, V] {
-	return trie.absoluteRoot().LastAddedNode()
-}
-
-func (trie *BinTrie[E, V]) LowerAddedNode(key E) *BinTrieNode[E, V] {
-	return trie.absoluteRoot().LowerAddedNode(key)
-}
-
-func (trie *BinTrie[E, V]) FloorAddedNode(key E) *BinTrieNode[E, V] {
-	return trie.absoluteRoot().FloorAddedNode(key)
-}
-
-func (trie *BinTrie[E, V]) HigherAddedNode(key E) *BinTrieNode[E, V] {
-	return trie.absoluteRoot().HigherAddedNode(key)
-}
-
-func (trie *BinTrie[E, V]) CeilingAddedNode(key E) *BinTrieNode[E, V] {
-	return trie.absoluteRoot().CeilingAddedNode(key)
-}
-
-func (trie *BinTrie[E, V]) Clone() *BinTrie[E, V] {
-	if trie == nil {
-		return nil
-	}
-	return &BinTrie[E, V]{binTree[E, V]{root: trie.absoluteRoot().CloneTree().toBinTreeNode()}}
-}
-
-// DeepEqual returns whether the given argument is a trie with a set of nodes with the same keys as in this trie according to the Compare method,
-// and the same values according to the reflect.DeepEqual method
-func (trie *BinTrie[E, V]) DeepEqual(other *BinTrie[E, V]) bool {
-	return trie.absoluteRoot().TreeDeepEqual(other.absoluteRoot())
-}
-
-// Equal returns whether the given argument is a trie with a set of nodes with the same keys as in this trie according to the Compare method
-func (trie *BinTrie[E, V]) Equal(other *BinTrie[E, V]) bool {
-	return trie.absoluteRoot().TreeEqual(other.absoluteRoot())
-}
-
-// For some reason Format must be here and not in addressTrieNode for nil node.
-// It panics in fmt code either way, but if in here then it is handled by a recover() call in fmt properly.
-// Seems to be a problem only in the debugger.
-
-// Format implements the fmt.Formatter interface
-func (trie BinTrie[E, V]) Format(state fmt.State, verb rune) {
-	trie.format(state, verb)
-}
-
-// NewBinTrie creates a new trie with root key.ToPrefixBlockLen(0).
-// If the key argument is not Equal to its zero-length prefix block, then the key will be added as well.
-func NewBinTrie[E TrieKey[E], V any](key E) BinTrie[E, V] {
-	trie := BinTrie[E, V]{binTree[E, V]{}}
-	root := key.ToPrefixBlockLen(0)
-	trie.setRoot(root)
-	if key.Compare(root) != 0 {
-		trie.Add(key)
-	}
-	return trie
-}
-
-func TreesString[E TrieKey[E], V any](withNonAddedKeys bool, tries ...*BinTrie[E, V]) string {
-	binTrees := make([]*binTree[E, V], 0, len(tries))
-	for _, trie := range tries {
-		binTrees = append(binTrees, tobinTree(trie))
-	}
-	return treesString(withNonAddedKeys, binTrees...)
-}
-
-func tobinTree[E TrieKey[E], V any](trie *BinTrie[E, V]) *binTree[E, V] {
-	return (*binTree[E, V])(unsafe.Pointer(trie))
+type indentsNode[E TrieKey[E]] struct {
+	inds indents
+	node *BinTrieNode[E, AddedSubnodeMapping]
 }

@@ -52,7 +52,7 @@ type binTreeKeyIterator[E Key, V any] struct {
 }
 
 func (iter binTreeKeyIterator[E, V]) Next() E {
-	return iter.nodeIteratorRem.Next().getKey()
+	return iter.nodeIteratorRem.Next().GetKey()
 	//node := iter.nodeIteratorRem.Next()
 	//if node != nil {
 	//	return node.getKey()
@@ -61,7 +61,7 @@ func (iter binTreeKeyIterator[E, V]) Next() E {
 }
 
 func (iter binTreeKeyIterator[E, V]) Remove() E {
-	return iter.nodeIteratorRem.Remove().getKey()
+	return iter.nodeIteratorRem.Remove().GetKey()
 	//node := iter.nodeIteratorRem.Remove()
 	//if node != nil {
 	//	return node.getKey()
@@ -108,7 +108,7 @@ func (iter *binTreeNodeIterator[E, V]) getStart(
 		return nil
 	}
 	if !addedOnly || start.IsAdded() {
-		if bounds == nil || bounds.isInBounds(start.getKey()) {
+		if bounds == nil || bounds.isInBounds(start.GetKey()) {
 			return start
 		}
 	}
@@ -258,7 +258,7 @@ func newPriorityNodeIteratorBounded[E Key, V any](
 
 	comp := func(one, two queueType) int {
 		node1, node2 := one.(*binTreeNode[E, V]), two.(*binTreeNode[E, V])
-		addr1, addr2 := node1.getKey(), node2.getKey()
+		addr1, addr2 := node1.GetKey(), node2.GetKey()
 		return comparator(addr1, addr2)
 	}
 	queue := &nodePriorityQueue{comparator: comp}
@@ -324,7 +324,7 @@ func newCachingPriorityNodeIteratorSized[E Key, V any](
 	comp := func(one, two queueType) int {
 		cached1, cached2 := one.(*cached[E, V]), two.(*cached[E, V])
 		node1, node2 := cached1.node, cached2.node
-		addr1, addr2 := node1.getKey(), node2.getKey()
+		addr1, addr2 := node1.GetKey(), node2.GetKey()
 		return comparator(addr1, addr2)
 	}
 	queue := &nodePriorityQueue{comparator: comp}
@@ -580,15 +580,14 @@ func (iter *subNodeCachingIterator[E, V]) GetCached() C {
 
 func (iter *subNodeCachingIterator[E, V]) populateCacheItem(current *binTreeNode[E, V]) {
 	nextKey := iter.nextKey
-	if current.getKey() == nextKey {
+	if current.GetKey() == nextKey {
 		iter.cacheItem = iter.nextCached
 		iter.nextCached = nil
-		//nextKey = nil
 	} else {
 		stack := iter.stack
 		if stack != nil {
 			stackIndex := iter.stackIndex
-			if stackIndex >= 0 && stack[stackIndex] == current.getKey() {
+			if stackIndex >= 0 && stack[stackIndex] == current.GetKey() {
 				iter.cacheItem = stack[stackIndex+stackSize].(C)
 				stack[stackIndex+stackSize] = nil
 				stack[stackIndex] = nil
@@ -649,14 +648,12 @@ func (iter *subNodeCachingIterator[E, V]) cacheWithFirstSubNode(object C) bool {
 			firstNode = iter.current.getUpperSubNode()
 		}
 		if firstNode != nil {
-			if (iter.addedOnly && !firstNode.IsAdded()) || (iter.bnds != nil && !iter.bnds.isInBounds(firstNode.getKey())) {
-				//firstNode = getToNextOperation().apply(firstNode, current);
+			if (iter.addedOnly && !firstNode.IsAdded()) || (iter.bnds != nil && !iter.bnds.isInBounds(firstNode.GetKey())) {
 				firstNode = iter.operator(firstNode, iter.current)
 			}
 			if firstNode != nil {
 				// the lower sub-node is always next if it exists
-				iter.nextKey = firstNode.getKey()
-				//System.out.println(current + " cached with " + firstNode + ": " + object);
+				iter.nextKey = firstNode.GetKey()
 				iter.nextCached = object
 				return true
 			}
@@ -677,7 +674,7 @@ func (iter *subNodeCachingIterator[E, V]) cacheWithSecondSubNode(object C) bool 
 			secondNode = iter.current.getLowerSubNode()
 		}
 		if secondNode != nil {
-			if (iter.addedOnly && !secondNode.IsAdded()) || (iter.bnds != nil && !iter.bnds.isInBounds(secondNode.getKey())) {
+			if (iter.addedOnly && !secondNode.IsAdded()) || (iter.bnds != nil && !iter.bnds.isInBounds(secondNode.GetKey())) {
 				//secondNode = getToNextOperation().apply(secondNode, current);
 				secondNode = iter.operator(secondNode, iter.current)
 			}
@@ -690,14 +687,14 @@ func (iter *subNodeCachingIterator[E, V]) cacheWithSecondSubNode(object C) bool 
 					firstNode = iter.current.getUpperSubNode()
 				}
 				if firstNode == nil {
-					iter.nextKey = secondNode.getKey()
+					iter.nextKey = secondNode.GetKey()
 					iter.nextCached = object
 				} else {
 					if iter.stack == nil {
 						iter.stack = make([]C, stackSize<<1)
 					}
 					iter.stackIndex++
-					iter.stack[iter.stackIndex] = secondNode.getKey()
+					iter.stack[iter.stackIndex] = secondNode.GetKey()
 					iter.stack[iter.stackIndex+stackSize] = object
 				}
 				return true

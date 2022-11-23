@@ -96,16 +96,20 @@ func (node *PathNode[E, V]) Previous() *PathNode[E, V] {
 	return node.previous
 }
 
-func (node *PathNode[E, V]) getKey() (key E) {
+//func (node *PathNode[E, V]) getKey() (key E) {
+//	if node != nil {
+//		return node.item
+//	}
+//	return
+//}
+
+// GetKey gets the key used for placing the node in the tree.
+func (node *PathNode[E, V]) GetKey() (key E) {
+	//return node.getKey()
 	if node != nil {
 		return node.item
 	}
 	return
-}
-
-// GetKey gets the key used for placing the node in the tree.
-func (node *PathNode[E, V]) GetKey() E {
-	return node.getKey()
 }
 
 // GetValue returns the value assigned to the node
@@ -160,9 +164,9 @@ func (node *PathNode[E, V]) Size() (storedSize int) {
 // a closed circle indicating this node is an added node.
 func (node *PathNode[E, V]) String() string {
 	if node == nil {
-		return nodeString[E, V](nil)
+		return NodeString[E, V](nil)
 	}
-	return nodeString[E, V](node)
+	return NodeString[E, V](node)
 }
 
 // ListString returns a visual representation of the sub-list with this node as root, with one node per line.

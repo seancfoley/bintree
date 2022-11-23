@@ -333,16 +333,16 @@ func (node *BinTrieNode[E, V]) setKey(item E) {
 
 // GetKey gets the key used for placing the node in the tree.
 func (node *BinTrieNode[E, V]) GetKey() E {
-	return node.toBinTreeNode().getKey()
+	return node.toBinTreeNode().GetKey()
 }
 
 //// GetKey gets the key used for placing the node in the tree.
-//func (node *BinTrieNode[E, V]) GetKey() TrieKey {
+//func (node  *BinTrieNode[E, V]) GetKey() TrieKey {
 //	val := node.toBinTreeNode().getKey()
 //	if val == nil {
 //		return nil
 //	}
-//	return val.(TrieKey) // TODO xxxx so here we assert that keys satisfy TrieKey xxxx
+//	return val.(TrieKey)
 //}
 
 // IsRoot returns whether this is the root of the backing tree.
@@ -767,7 +767,7 @@ func (node *BinTrieNode[E, V]) remapNonAdded(result *opResult[E, V]) {
 
 func (node *BinTrieNode[E, V]) remapMatch(result *opResult[E, V]) {
 	result.existingNode = node
-	//result.existingNode = node.toTrieNode()
+	//result.existingNode = node.toTrieNode() TODO remove
 	if node.remap(result, true) {
 		node.matchedInserted(result)
 	}

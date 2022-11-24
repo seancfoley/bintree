@@ -650,12 +650,13 @@ func (trie *BinTrie[E, V]) AddedNodesTreeString() string {
 		return "\n" + nilString()
 	}
 	addedTree := trie.ConstructAddedNodesTree() //xxxxx can I make this an arg? xxxx  or can I do the same with a public func?
-	return AddedNodesTreeString[E, V](addedTree)
+	return AddedNodesTreeString[E, V](addedTree.GetRoot())
 }
 
 // AddedNodesTreeString provides a flattened version of the trie showing only the contained added nodes and their containment structure, which is non-binary.
 // The root node is included, which may or may not be added.
-func AddedNodesTreeString[E TrieKey[E], V any](addedTree BinTrie[E, AddedSubnodeMapping]) string {
+func AddedNodesTreeString[E TrieKey[E], V any](addedTree *BinTrieNode[E, AddedSubnodeMapping]) string {
+	//func AddedNodesTreeString[E TrieKey[E], V any](addedTree BinTrie[E, AddedSubnodeMapping]) string {
 	//if trie == nil {
 	//	return "\n" + nilString()
 	//}
@@ -663,12 +664,12 @@ func AddedNodesTreeString[E TrieKey[E], V any](addedTree BinTrie[E, AddedSubnode
 	//addedTree := trie.ConstructAddedNodesTree() xxxxx can I make this an arg? xxxx  or can I do the same with a public func?
 
 	var stack []indentsNode[E]
-	var root, nextNode *BinTrieNode[E, AddedSubnodeMapping]
-	root = addedTree.absoluteRoot()
+	//var root, nextNode *BinTrieNode[E, AddedSubnodeMapping]
+	//root = addedTree.absoluteRoot() xxxx pass in the root xxxx
 	builder := strings.Builder{}
 	builder.WriteByte('\n')
 	nodeIndent, subNodeIndent := "", ""
-	nextNode = root
+	nextNode := addedTree
 	for {
 		builder.WriteString(nodeIndent)
 		//xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

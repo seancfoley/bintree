@@ -584,7 +584,7 @@ func (trie *BinTrie[E, V]) AddedNodesTreeString() string {
 	if trie == nil {
 		return "\n" + nilString()
 	}
-	addedTree := trie.ConstructAddedNodesTree() //xxxxx can I make this an arg? xxxx  or can I do the same with a public func?
+	addedTree := trie.ConstructAddedNodesTree()
 	return AddedNodesTreeString[E, V](addedTree.GetRoot())
 }
 

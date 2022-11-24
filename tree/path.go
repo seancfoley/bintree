@@ -78,7 +78,7 @@ type PathNode[E Key, V any] struct {
 	item E
 
 	// only for associative trie nodes
-	value V //TODO LATER generics - this could be a generic, but to be consistent with clone, need to be careful about copies/clones, maybe consistent with interfaces (this might not be necessary)
+	value V
 
 	// the number of added nodes below this one, including this one if added
 	storedSize int
@@ -95,13 +95,6 @@ func (node *PathNode[E, V]) Next() *PathNode[E, V] {
 func (node *PathNode[E, V]) Previous() *PathNode[E, V] {
 	return node.previous
 }
-
-//func (node *PathNode[E, V]) getKey() (key E) {
-//	if node != nil {
-//		return node.item
-//	}
-//	return
-//}
 
 // GetKey gets the key used for placing the node in the tree.
 func (node *PathNode[E, V]) GetKey() (key E) {

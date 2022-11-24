@@ -113,19 +113,11 @@ func (b *bounds[E]) isAboveUpperBound(item E) bool {
 	return true
 }
 
-//// E is a key for a binary tree node
-//type E interface{}
-//
-//// values for an associative binary tree
-//type V interface{}
-
 type Key interface {
 	comparable // needed by populateCacheItem
-
-	//TrieKey
 }
 
-// cached values for iterators
+// C represents cached values in iterators
 type C any
 
 const sizeUnknown = -1
@@ -136,7 +128,7 @@ type binTreeNode[E Key, V any] struct {
 	item E
 
 	// only for associative trie nodes
-	value V //TODO LATER generics - this could be a generic, but to be consistent with clone, need to be careful about copies/clones, maybe consistent with interfaces (this might not be necessary)
+	value V
 
 	parent, lower, upper *binTreeNode[E, V]
 
@@ -147,7 +139,7 @@ type binTreeNode[E Key, V any] struct {
 	// some nodes represent elements added to the tree and others are nodes generated internally when other nodes are added
 	added bool
 
-	addr *binTreeNode[E, V]
+	self *binTreeNode[E, V]
 }
 
 // This hideptr trick is used in strings.Builder to trick escape analysis to ensure that this self-referential pointer does not cause automatic heap allocation
@@ -164,11 +156,11 @@ func hideptr(p unsafe.Pointer) unsafe.Pointer {
 }
 
 func (node *binTreeNode[E, V]) setAddr() {
-	node.addr = (*binTreeNode[E, V])(hideptr(unsafe.Pointer(node)))
+	node.self = (*binTreeNode[E, V])(hideptr(unsafe.Pointer(node)))
 }
 
 func (node *binTreeNode[E, V]) checkCopy() {
-	if node != nil && node.addr != nil && node.addr != node {
+	if node != nil && node.self != nil && node.self != node {
 		panic("attempting to modify trie with a copied node")
 	}
 }
@@ -179,15 +171,6 @@ func (node *binTreeNode[E, V]) getChangeTracker() *changeTracker {
 	}
 	return node.cTracker
 }
-
-//func (node *binTreeNode[E, V]) toTrieNode() *BinTrieNode[E, V] { //   - but how?
-//	return toTrieNode(node)
-//	//return (*BinTrieNode[E, V])(unsafe.Pointer(node))
-//}
-
-//func toTrieNodeX[E1 Key, E2 TrieKey[E2], V any](node *binTreeNode[E1, V]) *BinTrieNode[E2, V] {
-//	return (*BinTrieNode[E2, V])(unsafe.Pointer(node))
-//}
 
 func toTrieNode[E TrieKey[E], V any](node *binTreeNode[E, V]) *BinTrieNode[E, V] {
 	return (*BinTrieNode[E, V])(unsafe.Pointer(node))
@@ -771,22 +754,15 @@ func (node *binTreeNode[E, V]) nextPostOrderNode(end *binTreeNode[E, V]) *binTre
 // or nil if there is no such node.
 func (node *binTreeNode[E, V]) nextAddedNode() *binTreeNode[E, V] {
 	return node.nextAdded(nil, (*binTreeNode[E, V]).nextNodeBounded)
-	//
-	//f := (*binTreeNode[E, V]).nextNodeBounded
-	//return node.nextAdded(nil, f)
-	//
-	//return node.nextAdded(nil, func(current *binTreeNode[E, V], end *binTreeNode[E, V]) *binTreeNode[E, V] { TODO this works too
-	//	return current.nextNodeBounded(end)
-	//})
 }
 
 // Returns the previous node in the tree that is an added node, following the tree order in reverse,
 // or nil if there is no such node.
 func (node *binTreeNode[E, V]) previousAddedNode() *binTreeNode[E, V] {
-	return node.nextAdded(nil, (*binTreeNode[E, V]).previousNodeBounded) //TODO maybe this is just a Goland problem - see https://go.dev/play/p/eLbRIR5fHu6
+	return node.nextAdded(nil, (*binTreeNode[E, V]).previousNodeBounded)
 }
 
-//TODO check this one, seems to work.  Try it out in Goland: https://go.dev/play/p/lf8zJtGCKYI
+// The generic method pointers are fine.  The parser errors are just a Goland problem.  Try it out in playground: https://go.dev/play/p/lf8zJtGCKYI
 
 func nextTest[E Key, V any](current, end *binTreeNode[E, V], nextOperator func(current *binTreeNode[E, V], end *binTreeNode[E, V]) *binTreeNode[E, V], tester func(current *binTreeNode[E, V]) bool) *binTreeNode[E, V] {
 	for {
@@ -1048,8 +1024,11 @@ func (node binTreeNode[E, V]) format(state fmt.State, verb rune) {
 		return
 	}
 	s := flagsFromState(state, verb)
-	_, _ = state.Write([]byte(fmt.Sprintf(s, unsafe.Pointer(node.addr))))
+	_, _ = state.Write([]byte(fmt.Sprintf(s, binTreeNodePtr[E, V](node.self))))
 }
+
+// only used to eliminate the method set of *binTreeNode
+type binTreeNodePtr[E Key, V any] *binTreeNode[E, V]
 
 func flagsFromState(state fmt.State, verb rune) string {
 	flags := "# +-0"

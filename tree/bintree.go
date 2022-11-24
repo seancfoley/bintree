@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"unsafe"
 )
 
 type binTree[E Key, V any] struct {
@@ -72,8 +71,7 @@ func (tree binTree[E, V]) format(state fmt.State, verb rune) {
 	// How that pointer is printed varies a lot depending on the verb and flags.
 	// So, in the case of unsupported flags, let's print { rootPointer } where rootPointer is printed according to the flags and verb.
 	s := flagsFromState(state, verb)
-	rootStr := fmt.Sprintf(s, unsafe.Pointer(tree.root))
-	//rootStr := fmt.Sprintf(s, uint64(tree.root))
+	rootStr := fmt.Sprintf(s, binTreeNodePtr[E, V](tree.root))
 	bytes := make([]byte, len(rootStr)+2)
 	bytes[0] = '{'
 	shifted := bytes[1:]

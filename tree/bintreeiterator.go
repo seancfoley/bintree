@@ -53,26 +53,16 @@ type binTreeKeyIterator[E Key, V any] struct {
 
 func (iter binTreeKeyIterator[E, V]) Next() E {
 	return iter.nodeIteratorRem.Next().GetKey()
-	//node := iter.nodeIteratorRem.Next()
-	//if node != nil {
-	//	return node.getKey()
-	//}
-	//return nil
 }
 
 func (iter binTreeKeyIterator[E, V]) Remove() E {
 	return iter.nodeIteratorRem.Remove().GetKey()
-	//node := iter.nodeIteratorRem.Remove()
-	//if node != nil {
-	//	return node.getKey()
-	//}
-	//return nil
 }
 
 func newNodeIterator[E Key, V any](forward, addedOnly bool, start, end *binTreeNode[E, V], ctracker *changeTracker) nodeIteratorRem[E, V] {
 	var nextOperator func(current *binTreeNode[E, V], end *binTreeNode[E, V]) *binTreeNode[E, V]
 	if forward {
-		nextOperator = (*(binTreeNode[E, V])).nextNodeBounded
+		nextOperator = (*binTreeNode[E, V]).nextNodeBounded
 	} else {
 		nextOperator = (*binTreeNode[E, V]).previousNodeBounded
 	}
@@ -159,8 +149,6 @@ func (iter *binTreeNodeIterator[E, V]) Remove() *binTreeNode[E, V] {
 	return result
 }
 
-//var _ nodeIteratorRem = &binTreeNodeIterator{} // TODO need to choose a key and a Value here
-
 type CachingIterator interface {
 	// GetCached returns an object previously cached with the current iterated node.
 	// After Next has returned a node,
@@ -204,8 +192,6 @@ type queueType = any
 type nodePriorityQueue struct {
 	queue      []queueType
 	comparator func(one, two queueType) int // -1, 0 or 1 if one is <, == or > two
-	//queue      []*binTreeNode
-	//comparator func(one, two *binTreeNode) int // -1, 0 or 1 if one is <, == or > two
 }
 
 func (prioQueue nodePriorityQueue) Len() int {
@@ -263,7 +249,6 @@ func newPriorityNodeIteratorBounded[E Key, V any](
 	}
 	queue := &nodePriorityQueue{comparator: comp}
 	if treeSize > 0 {
-		//queue.queue = make([]*binTreeNode[E, V], 0, (treeSize+2)>>1)
 		queue.queue = make([]queueType, 0, (treeSize+2)>>1)
 	}
 	op := func(currentNode *binTreeNode[E, V], endNode *binTreeNode[E, V]) *binTreeNode[E, V] {
@@ -283,7 +268,6 @@ func newPriorityNodeIteratorBounded[E Key, V any](
 			return nil
 		}
 		return node
-
 	}
 	if addedOnly {
 		wrappedOp := op
@@ -421,8 +405,6 @@ type cached[E Key, V any] struct {
 	node   *binTreeNode[E, V]
 	cached C
 }
-
-//var _ cachingNodeIterator = &cachingPriorityNodeIterator{} //TODO need to choose E and V here
 
 // The caching only useful when in reverse order, since you have to visit parent nodes first for it to be useful.
 func newPostOrderNodeIterator[E Key, V any](
@@ -675,7 +657,6 @@ func (iter *subNodeCachingIterator[E, V]) cacheWithSecondSubNode(object C) bool 
 		}
 		if secondNode != nil {
 			if (iter.addedOnly && !secondNode.IsAdded()) || (iter.bnds != nil && !iter.bnds.isInBounds(secondNode.GetKey())) {
-				//secondNode = getToNextOperation().apply(secondNode, current);
 				secondNode = iter.operator(secondNode, iter.current)
 			}
 			if secondNode != nil {
@@ -703,5 +684,3 @@ func (iter *subNodeCachingIterator[E, V]) cacheWithSecondSubNode(object C) bool 
 	}
 	return false
 }
-
-//var _ cachingNodeIterator = &subNodeCachingIterator{} // TODO need to choose E and V

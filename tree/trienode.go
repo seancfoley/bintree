@@ -309,7 +309,6 @@ func (node *BinTrieNode[E, V]) toBinTreeNode() *binTreeNode[E, V] {
 // setKey sets the key used for placing the node in the tree.
 // when freezeRoot is true, this is never called (and freezeRoot is always true)
 func (node *BinTrieNode[E, V]) setKey(item E) {
-	//func (node *BinTrieNode[E, V]) setKey(item TrieKey) {
 	node.binTreeNode.setKey(item)
 }
 

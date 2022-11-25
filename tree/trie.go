@@ -196,7 +196,12 @@ func (trie *BinTrie[E, V]) addTrie(addedTree *BinTrieNode[E, V], withValues bool
 		}
 	}
 	if !firstAdded {
-		firstNode = trie.GetNode(addedTree.GetKey())
+		key := addedTree.GetKey()
+		if key == nil {
+			firstNode = nil
+		} else {
+			firstNode = trie.GetNode(addedTree.GetKey())
+		}
 	}
 	return firstNode
 }
@@ -233,7 +238,12 @@ func AddTrieKeys[E TrieKey[E], V1 any, V2 any](trie *BinTrie[E, V1], addedTree *
 		}
 	}
 	if !firstAdded {
-		firstNode = trie.GetNode(addedTree.GetKey())
+		key := addedTree.GetKey()
+		if key == nil {
+			firstNode = nil
+		} else {
+			firstNode = trie.GetNode(key)
+		}
 	}
 	return firstNode
 }
@@ -518,13 +528,17 @@ func tobinTree[E TrieKey[E], V any](trie *BinTrie[E, V]) *binTree[E, V] {
 // then the alternative tree structure provided by this method is the same as the original trie.
 // The trie values of this trie are of type []*BinTrieNode
 func (trie *BinTrie[E, V]) ConstructAddedNodesTree() BinTrie[E, AddedSubnodeMapping] {
-	newRoot := &binTreeNode[E, AddedSubnodeMapping]{
-		item:     trie.root.item,
-		cTracker: &changeTracker{},
-	}
-	newRoot.setAddr()
-	if trie.root.IsAdded() {
-		newRoot.SetAdded()
+	var newRoot *binTreeNode[E, AddedSubnodeMapping]
+	existingRoot := trie.GetRoot()
+	if existingRoot != nil {
+		newRoot := &binTreeNode[E, AddedSubnodeMapping]{
+			item:     trie.root.item,
+			cTracker: &changeTracker{},
+		}
+		newRoot.setAddr()
+		if trie.root.IsAdded() {
+			newRoot.SetAdded()
+		}
 	}
 	newTrie := BinTrie[E, AddedSubnodeMapping]{binTree[E, AddedSubnodeMapping]{newRoot}}
 

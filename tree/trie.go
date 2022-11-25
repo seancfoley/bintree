@@ -156,8 +156,11 @@ func (trie *BinTrie[E, V]) addNode(result *opResult[E, V], fromNode *BinTrieNode
 	return node
 }
 
-func (trie *BinTrie[E, V]) addTrie(addedTree *BinTrieNode[E, V], withValues bool) *BinTrieNode[E, V] {
-	iterator := addedTree.ContainingFirstAllNodeIterator(true)
+func (trie *BinTrie[E, V]) addTrie(addedTreeNode *BinTrieNode[E, V], withValues bool) *BinTrieNode[E, V] {
+	if addedTreeNode == nil { // addedTreeNode can be nil when the root of a zero-valued trie
+		return nil
+	}
+	iterator := addedTreeNode.ContainingFirstAllNodeIterator(true)
 	toAdd := iterator.Next()
 	result := &opResult[E, V]{
 		key: toAdd.GetKey(),
@@ -196,19 +199,17 @@ func (trie *BinTrie[E, V]) addTrie(addedTree *BinTrieNode[E, V], withValues bool
 		}
 	}
 	if !firstAdded {
-		key := addedTree.GetKey()
-		if key == nil {
-			firstNode = nil
-		} else {
-			firstNode = trie.GetNode(addedTree.GetKey())
-		}
+		firstNode = trie.GetNode(addedTreeNode.GetKey())
 	}
 	return firstNode
 }
 
 // AddTrieKeys copies the trie node structure of addedTrie into trie, but does not copy node mapped values
-func AddTrieKeys[E TrieKey[E], V1 any, V2 any](trie *BinTrie[E, V1], addedTree *BinTrieNode[E, V2]) *BinTrieNode[E, V1] {
-	iterator := addedTree.ContainingFirstAllNodeIterator(true)
+func AddTrieKeys[E TrieKey[E], V1 any, V2 any](trie *BinTrie[E, V1], addedTreeNode *BinTrieNode[E, V2]) *BinTrieNode[E, V1] {
+	if addedTreeNode == nil { // addedTreeNode can be nil when the root of a zero-valued trie
+		return nil
+	}
+	iterator := addedTreeNode.ContainingFirstAllNodeIterator(true)
 	toAdd := iterator.Next()
 	result := &opResult[E, V1]{
 		key: toAdd.GetKey(),
@@ -238,12 +239,7 @@ func AddTrieKeys[E TrieKey[E], V1 any, V2 any](trie *BinTrie[E, V1], addedTree *
 		}
 	}
 	if !firstAdded {
-		key := addedTree.GetKey()
-		if key == nil {
-			firstNode = nil
-		} else {
-			firstNode = trie.GetNode(key)
-		}
+		firstNode = trie.GetNode(addedTreeNode.GetKey())
 	}
 	return firstNode
 }

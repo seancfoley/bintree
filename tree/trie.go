@@ -162,12 +162,13 @@ func (trie *BinTrie[E, V]) addTrie(addedTreeNode *BinTrieNode[E, V], withValues 
 	}
 	iterator := addedTreeNode.ContainingFirstAllNodeIterator(true)
 	toAdd := iterator.Next()
+	firstKey := toAdd.GetKey()
 	result := &opResult[E, V]{
-		key: toAdd.GetKey(),
+		key: firstKey,
 		op:  insert,
 	}
 	var firstNode *BinTrieNode[E, V]
-	root := trie.absoluteRoot()
+	root := trie.ensureRoot(firstKey)
 	firstAdded := toAdd.IsAdded()
 	if firstAdded {
 		if withValues {
@@ -211,12 +212,13 @@ func AddTrieKeys[E TrieKey[E], V1 any, V2 any](trie *BinTrie[E, V1], addedTreeNo
 	}
 	iterator := addedTreeNode.ContainingFirstAllNodeIterator(true)
 	toAdd := iterator.Next()
+	firstKey := toAdd.GetKey()
 	result := &opResult[E, V1]{
-		key: toAdd.GetKey(),
+		key: firstKey,
 		op:  insert,
 	}
 	var firstNode *BinTrieNode[E, V1]
-	root := trie.absoluteRoot()
+	root := trie.ensureRoot(firstKey)
 	firstAdded := toAdd.IsAdded()
 	if firstAdded {
 		firstNode = trie.addNode(result, root)
@@ -539,7 +541,7 @@ func (trie *BinTrie[E, V]) ConstructAddedNodesTree() BinTrie[E, AddedSubnodeMapp
 	newTrie := BinTrie[E, AddedSubnodeMapping]{binTree[E, AddedSubnodeMapping]{newRoot}}
 
 	// populate the keys from the original trie into the new trie
-	AddTrieKeys(&newTrie, trie.absoluteRoot())
+	AddTrieKeys(&newTrie, existingRoot)
 
 	// now, as we iterate,
 	// we find our parent and add ourselves to that parent's list of subnodes

@@ -18,6 +18,7 @@ package tree
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"unsafe"
 )
 
@@ -87,6 +88,9 @@ func (trie *BinTrie[E, V]) setRoot(key E) *binTreeNode[E, V] {
 	root := &binTreeNode[E, V]{
 		item:     key,
 		cTracker: &changeTracker{},
+		pool: &sync.Pool{
+			New: func() any { return &opResult[E, V]{} },
+		},
 	}
 	root.setAddr()
 	trie.root = root
@@ -532,6 +536,9 @@ func (trie *BinTrie[E, V]) ConstructAddedNodesTree() BinTrie[E, AddedSubnodeMapp
 		newRoot := &binTreeNode[E, AddedSubnodeMapping]{
 			item:     trie.root.item,
 			cTracker: &changeTracker{},
+			pool: &sync.Pool{
+				New: func() any { return &opResult[E, V]{} },
+			},
 		}
 		newRoot.setAddr()
 		if trie.root.IsAdded() {

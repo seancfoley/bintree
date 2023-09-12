@@ -21,6 +21,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"unsafe"
 )
 
@@ -93,23 +94,23 @@ func (c *changeTracker) String() string {
 type bounds[E Key] struct {
 }
 
-func (b *bounds[E]) isInBounds(item E) bool {
+func (b *bounds[E]) isInBounds(_ E) bool {
 	return true
 }
 
-func (b *bounds[E]) isWithinLowerBound(item E) bool {
+func (b *bounds[E]) isWithinLowerBound(_ E) bool {
 	return true
 }
 
-func (b *bounds[E]) isBelowLowerBound(item E) bool {
+func (b *bounds[E]) isBelowLowerBound(_ E) bool {
 	return true
 }
 
-func (b *bounds[E]) isWithinUpperBound(item E) bool {
+func (b *bounds[E]) isWithinUpperBound(_ E) bool {
 	return true
 }
 
-func (b *bounds[E]) isAboveUpperBound(item E) bool {
+func (b *bounds[E]) isAboveUpperBound(_ E) bool {
 	return true
 }
 
@@ -135,6 +136,9 @@ type binTreeNode[E Key, V any] struct {
 	storedSize int
 
 	cTracker *changeTracker
+
+	// used to store opResult objects for search operations
+	pool *sync.Pool
 
 	// some nodes represent elements added to the tree and others are nodes generated internally when other nodes are added
 	added bool
@@ -1073,28 +1077,33 @@ func (node *binTreeNode[E, V]) clone() *binTreeNode[E, V] {
 		result.storedSize = 0
 	}
 	// it is ok to have no change tracker, because the parent, lower and upper are nil
-	// so any attempt to remove or clear will do nothing, so no calls to the change tracker
+	// so any attempt to remove or clear will do nothing,
+	// and you cannot add to nodes, you can only add to tries,
+	// so no calls to the change tracker
 	result.cTracker = nil
+	// no need to make use of the shared pool
+	result.pool = nil
 	result.setAddr()
 	return &result
 }
 
-func (node *binTreeNode[E, V]) cloneTreeNode(cTracker *changeTracker) *binTreeNode[E, V] {
+func (node *binTreeNode[E, V]) cloneTreeNode(cTracker *changeTracker, pool *sync.Pool) *binTreeNode[E, V] {
 	if node == nil {
 		return nil
 	}
 	result := *node // maintains same key and value which are not copied
 	result.setParent(nil)
 	result.cTracker = cTracker
+	result.pool = pool
 	result.setAddr()
 	return &result
 }
 
-func (node *binTreeNode[E, V]) cloneTreeTrackerBounds(ctracker *changeTracker, bnds *bounds[E]) *binTreeNode[E, V] {
+func (node *binTreeNode[E, V]) cloneTreeTrackerBounds(ctracker *changeTracker, pool *sync.Pool, bnds *bounds[E]) *binTreeNode[E, V] {
 	if node == nil {
 		return nil
 	}
-	rootClone := node.cloneTreeNode(ctracker)
+	rootClone := node.cloneTreeNode(ctracker, pool)
 	clonedNode := rootClone
 	iterator := clonedNode.containingFirstAllNodeIterator(true).(*subNodeCachingIterator[E, V])
 	recalculateSize := false
@@ -1124,7 +1133,7 @@ func (node *binTreeNode[E, V]) cloneTreeTrackerBounds(ctracker *changeTracker, b
 			}
 		}
 		if lower != nil {
-			clonedNode.setLower(lower.cloneTreeNode(ctracker))
+			clonedNode.setLower(lower.cloneTreeNode(ctracker, pool))
 		} else {
 			clonedNode.setLower(nil)
 		}
@@ -1154,7 +1163,7 @@ func (node *binTreeNode[E, V]) cloneTreeTrackerBounds(ctracker *changeTracker, b
 			}
 		}
 		if upper != nil {
-			clonedNode.setUpper(upper.cloneTreeNode(ctracker))
+			clonedNode.setUpper(upper.cloneTreeNode(ctracker, pool))
 		} else {
 			clonedNode.setUpper(nil)
 		}
@@ -1177,14 +1186,4 @@ func (node *binTreeNode[E, V]) cloneTreeTrackerBounds(ctracker *changeTracker, b
 		rootClone.Size()
 	}
 	return rootClone
-}
-
-func (node *binTreeNode[E, V]) cloneTreeBounds(bnds *bounds[E]) *binTreeNode[E, V] {
-	return node.cloneTreeTrackerBounds(&changeTracker{}, bnds)
-}
-
-// Clones the sub-tree starting with this node as root.
-// The nodes are cloned, but their keys and values are not cloned.
-func (node *binTreeNode[E, V]) cloneTree() *binTreeNode[E, V] {
-	return node.cloneTreeBounds(nil)
 }

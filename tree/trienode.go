@@ -468,25 +468,97 @@ func (node *BinTrieNode[E, V]) setLower(lower *BinTrieNode[E, V]) {
 // GetUpperSubNode gets the direct child node whose key is largest in value
 func (node *BinTrieNode[E, V]) GetUpperSubNode() *BinTrieNode[E, V] {
 	return toTrieNode(node.toBinTreeNode().getUpperSubNode())
-	//return node.toBinTreeNode().getUpperSubNode().toTrieNode()
 }
 
 // GetLowerSubNode gets the direct child node whose key is smallest in value
 func (node *BinTrieNode[E, V]) GetLowerSubNode() *BinTrieNode[E, V] {
 	return toTrieNode(node.toBinTreeNode().getLowerSubNode())
-	//return node.toBinTreeNode().getLowerSubNode().toTrieNode()
 }
 
 // GetParent gets the node from which this node is a direct child node, or nil if this is the root.
 func (node *BinTrieNode[E, V]) GetParent() *BinTrieNode[E, V] {
 	return toTrieNode(node.toBinTreeNode().getParent())
-	//return node.toBinTreeNode().getParent().toTrieNode()
+}
+
+func (node *BinTrieNode[E, V]) doLookup(key E, longestPrefixMatch, contains bool) (res *BinTrieNode[E, V]) {
+	var result *opResult[E, V]
+	if node == nil {
+		return nil
+	}
+	pool := node.pool
+	if pool != nil {
+		result = pool.Get().(*opResult[E, V])
+		result.key = key
+		result.op = lookup
+	} else {
+		result = &opResult[E, V]{
+			key: key,
+			op:  lookup,
+		}
+	}
+	node.matchBits(result)
+	if longestPrefixMatch {
+		res = result.smallestContaining
+	} else if contains {
+		res = result.containedBy
+	} else {
+		res = result.existingNode
+	}
+	if pool != nil {
+		result.clean()
+		pool.Put(result)
+	}
+	return
+}
+
+func (node *BinTrieNode[E, V]) Get(key E) (V, bool) {
+	var result *opResult[E, V]
+	if node == nil {
+		var v V
+		return v, false
+	}
+	pool := node.pool
+	if pool != nil {
+		result = pool.Get().(*opResult[E, V])
+		result.key = key
+		result.op = lookup
+	} else {
+		result = &opResult[E, V]{
+			key: key,
+			op:  lookup,
+		}
+	}
+	node.matchBits(result)
+	resultNode := result.existingNode
+	if pool != nil {
+		result.clean()
+		pool.Put(result)
+	}
+	if resultNode == nil {
+		var v V
+		return v, false
+	}
+	return resultNode.GetValue(), true
 }
 
 func (node *BinTrieNode[E, V]) Contains(addr E) bool {
-	result := node.doLookup(addr)
-	res := result.exists
+	if node == nil {
+		return false
+	}
+	var result *opResult[E, V]
 	pool := node.pool
+	if pool != nil {
+		result = pool.Get().(*opResult[E, V])
+		result.key = addr
+		result.op = lookup
+	} else {
+		result = &opResult[E, V]{
+			key: addr,
+			op:  lookup,
+		}
+	}
+	node.matchBits(result)
+	res := result.exists
 	if pool != nil {
 		result.clean()
 		pool.Put(result)
@@ -495,13 +567,14 @@ func (node *BinTrieNode[E, V]) Contains(addr E) bool {
 }
 
 func (node *BinTrieNode[E, V]) RemoveNode(key E) bool {
+	if node == nil {
+		return false
+	}
 	result := &opResult[E, V]{
 		key: key,
 		op:  insertedDelete,
 	}
-	if node != nil {
-		node.matchBits(result)
-	}
+	node.matchBits(result)
 	return result.exists
 }
 
@@ -511,14 +584,7 @@ func (node *BinTrieNode[E, V]) RemoveNode(key E) bool {
 // It returns any node, whether added or not,
 // including any prefix block node that was not added.
 func (node *BinTrieNode[E, V]) GetNode(key E) *BinTrieNode[E, V] {
-	result := node.doLookup(key)
-	res := result.existingNode
-	pool := node.pool
-	if pool != nil {
-		result.clean()
-		pool.Put(result)
-	}
-	return res
+	return node.doLookup(key, false, false)
 }
 
 // GetAddedNode gets trie nodes representing added elements.
@@ -532,66 +598,33 @@ func (node *BinTrieNode[E, V]) GetAddedNode(key E) *BinTrieNode[E, V] {
 	return nil
 }
 
-func (node *BinTrieNode[E, V]) Get(key E) (V, bool) {
-	var result *opResult[E, V]
-	pool := node.pool
-	if pool != nil {
-		result = pool.Get().(*opResult[E, V])
-		result.key = key
-		result.op = lookup
-	} else {
-		result = &opResult[E, V]{
-			key: key,
-			op:  lookup,
-		}
-	}
-	if node != nil {
-		node.matchBits(result)
-	}
-	resultNode := result.existingNode
-	if pool != nil {
-		result.clean()
-		pool.Put(result)
-	}
-	if resultNode == nil {
-		var v V
-		return v, false
-	}
-	return resultNode.GetValue(), true
-}
-
 func (node *BinTrieNode[E, V]) RemoveElementsContainedBy(key E) *BinTrieNode[E, V] {
+	if node == nil {
+		return nil
+	}
 	result := &opResult[E, V]{
 		key: key,
 		op:  subtreeDelete,
 	}
-	if node != nil {
-		node.matchBits(result)
-	}
+	node.matchBits(result)
 	return result.deleted
 }
 
 func (node *BinTrieNode[E, V]) ElementsContainedBy(key E) *BinTrieNode[E, V] {
-	result := node.doLookup(key)
-	res := result.containedBy
-	pool := node.pool
-	if pool != nil {
-		result.clean()
-		pool.Put(result)
-	}
-	return res
+	return node.doLookup(key, false, true)
 }
 
 // ElementsContaining finds the trie nodes containing the given key and returns them as a linked list
 // only added nodes are added to the linked list
 func (node *BinTrieNode[E, V]) ElementsContaining(key E) *Path[E, V] {
+	if node == nil {
+		return nil
+	}
 	result := &opResult[E, V]{
 		key: key,
 		op:  allContaining,
 	}
-	if node != nil {
-		node.matchBits(result)
-	}
+	node.matchBits(result)
 	return result.getContaining()
 }
 
@@ -605,20 +638,36 @@ func (node *BinTrieNode[E, V]) LongestPrefixMatch(key E) (E, bool) {
 	return res.GetKey(), true
 }
 
-// LongestPrefixMatchNode finds the node with the longest matching prefix
-// only added nodes are added to the linked list
+// LongestPrefixMatchNode finds the node with the longest matching prefix.
+// Only added nodes are considered.
 func (node *BinTrieNode[E, V]) LongestPrefixMatchNode(key E) *BinTrieNode[E, V] {
-	result := node.doLookup(key)
-	res := result.smallestContaining
-	pool := node.pool
-	if pool != nil {
-		result.clean()
-		pool.Put(result)
+	return node.doLookup(key, true, false)
+}
+
+// ShortestPrefixMatch finds the shortest matching prefix amongst keys added to the trie.
+// Only added nodes are considered.
+// It is quicker than LongestPrefixMatch in that once it finds the first containing node, the look-up is done.
+func (node *BinTrieNode[E, V]) ShortestPrefixMatch(key E) (E, bool) {
+	res := node.ShortestPrefixMatchNode(key)
+	if res == nil {
+		var e E
+		return e, false
 	}
-	return res
+	return res.GetKey(), true
+}
+
+func (node *BinTrieNode[E, V]) ShortestPrefixMatchNode(key E) *BinTrieNode[E, V] {
+	return node.elementContains(key)
 }
 
 func (node *BinTrieNode[E, V]) ElementContains(key E) bool {
+	return node.elementContains(key) != nil
+}
+
+func (node *BinTrieNode[E, V]) elementContains(key E) *BinTrieNode[E, V] {
+	if node == nil {
+		return nil
+	}
 	var result *opResult[E, V]
 	pool := node.pool
 	if pool != nil {
@@ -631,35 +680,13 @@ func (node *BinTrieNode[E, V]) ElementContains(key E) bool {
 			op:  containing,
 		}
 	}
-	if node != nil {
-		node.matchBits(result)
-	}
+	node.matchBits(result)
 	res := result.largestContaining
 	if pool != nil {
 		result.clean()
 		pool.Put(result)
 	}
-	return res != nil
-}
-
-func (node *BinTrieNode[E, V]) doLookup(key E) *opResult[E, V] {
-	var result *opResult[E, V]
-	pool := node.pool
-	if pool != nil {
-		result = pool.Get().(*opResult[E, V])
-		result.key = key
-		result.op = lookup
-	} else {
-		result = &opResult[E, V]{
-			key: key,
-			op:  lookup,
-		}
-	}
-	if node != nil {
-		node.matchBits(result)
-	}
-
-	return result
+	return res
 }
 
 func (node *BinTrieNode[E, V]) removeSubtree(result *opResult[E, V]) {
@@ -1247,6 +1274,9 @@ func (node *BinTrieNode[E, V]) LastAddedNode() *BinTrieNode[E, V] {
 
 func (node *BinTrieNode[E, V]) findNodeNear(key E, below, exclusive bool) *BinTrieNode[E, V] {
 	var result *opResult[E, V]
+	if node == nil {
+		return nil
+	}
 	pool := node.pool
 	if pool != nil {
 		result = pool.Get().(*opResult[E, V])
@@ -1262,9 +1292,7 @@ func (node *BinTrieNode[E, V]) findNodeNear(key E, below, exclusive bool) *BinTr
 			nearExclusive: exclusive,
 		}
 	}
-	if node != nil {
-		node.matchBits(result)
-	}
+	node.matchBits(result)
 	backtrack := result.backtrackNode
 	if backtrack != nil {
 		parent := backtrack.GetParent()

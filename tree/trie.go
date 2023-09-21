@@ -278,18 +278,28 @@ func (trie *BinTrie[E, V]) ElementsContaining(key E) *Path[E, V] {
 	return trie.absoluteRoot().ElementsContaining(key)
 }
 
-// LongestPrefixMatch finds the key with the longest matching prefix.
+// LongestPrefixMatch finds the added key with the longest matching prefix.
 func (trie *BinTrie[E, V]) LongestPrefixMatch(key E) (E, bool) {
 	return trie.absoluteRoot().LongestPrefixMatch(key)
 }
 
-// LongestPrefixMatchNode finds the node with the longest matching prefix.
+// LongestPrefixMatchNode finds the added node with the longest matching prefix.
 func (trie *BinTrie[E, V]) LongestPrefixMatchNode(key E) *BinTrieNode[E, V] {
 	return trie.absoluteRoot().LongestPrefixMatchNode(key)
 }
 
 func (trie *BinTrie[E, V]) ElementContains(key E) bool {
 	return trie.absoluteRoot().ElementContains(key)
+}
+
+// ShortestPrefixMatch finds the added key with the shortest matching prefix.
+func (trie *BinTrie[E, V]) ShortestPrefixMatch(key E) (E, bool) {
+	return trie.absoluteRoot().ShortestPrefixMatch(key)
+}
+
+// ShortestPrefixMatchNode finds the added node whose key has the shortest matching prefix.
+func (trie *BinTrie[E, V]) ShortestPrefixMatchNode(key E) *BinTrieNode[E, V] {
+	return trie.absoluteRoot().ShortestPrefixMatchNode(key)
 }
 
 // GetNode gets the node in the sub-trie corresponding to the given address,

@@ -211,12 +211,9 @@ func (node *binTreeNode[E, V]) ClearValue() {
 	var v V
 	// new value assignment
 	node.value = v
-	//if node != nil {
-	//	node.value = nil
-	//}
 }
 
-// Returns whether this is the root of the backing tree.
+// IsRoot returns whether this is the root of the backing tree.
 func (node *binTreeNode[E, V]) IsRoot() bool {
 	return node != nil && node.parent == nil
 }

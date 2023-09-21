@@ -98,7 +98,6 @@ func (node *PathNode[E, V]) Previous() *PathNode[E, V] {
 
 // GetKey gets the key used for placing the node in the tree.
 func (node *PathNode[E, V]) GetKey() (key E) {
-	//return node.getKey()
 	if node != nil {
 		return node.item
 	}

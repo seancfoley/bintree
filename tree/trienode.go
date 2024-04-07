@@ -30,7 +30,7 @@ const (
 	remap                           // alters nodes based on the existing nodes and their values
 	lookup                          // find node for E, traversing all containing elements along the way
 	near                            // closest match, going down trie to get element considered closest. Whether one thing is closer than another is determined by the sorted order.
-	containing                      // find a single node whose keys contain E
+	containing                      // find a single node whose key contains E
 	allContaining                   // list the nodes whose keys contain E
 	insertedDelete                  // Remove node for E
 	subtreeDelete                   // Remove nodes whose keys are contained by E
@@ -258,11 +258,7 @@ type KeyCompareResult interface {
 	BitsMatchPartially() bool
 
 	// BitsDoNotMatch should be called when at least one bit in the new key does not match the same bit in the existing key.
-	// You can skip calling it if a prior call to MismatchCallbackRequired returns true.
 	BitsDoNotMatch(matchedBits BitCount)
-
-	// MismatchCallbackRequired indicates if you need to call BitsDoNotMatch for a mismatch
-	MismatchCallbackRequired() bool
 }
 
 // TrieKey represents a key for a trie.
@@ -346,6 +342,8 @@ type TrieKey[E any] interface {
 	GetTrieKeyData() *TrieKeyData
 }
 
+// Providing TrieKeyData for trie keys makes lookup faster.
+// However, it is optional, tries will work without it.
 type TrieKeyData struct {
 	Is32Bits, Is128Bits bool
 
@@ -716,7 +714,12 @@ func (node *BinTrieNode[E, V]) matchBitsFromIndex(bitIndex int, result *opResult
 	newKeyData := newKey.GetTrieKeyData()
 
 	op := result.op
-	simpleMatch := !(op == insert || op == near || op == remap)
+	var simpleMatch bool
+	switch op {
+	case insert, near, remap:
+	default:
+		simpleMatch = true
+	}
 
 	// having these allocated in result eliminates gc activity
 	result.nodeComp.result = result
@@ -792,11 +795,6 @@ func (comp nodeCompare[E, V]) BitsMatch() {
 
 func (comp nodeCompare[E, V]) BitsDoNotMatch(matchedBits BitCount) {
 	comp.node.handleSplitNode(comp.result, matchedBits)
-}
-
-func (comp nodeCompare[E, V]) MismatchCallbackRequired() bool {
-	op := comp.result.op
-	return op == insert || op == near || op == remap
 }
 
 func (comp nodeCompare[E, V]) BitsMatchPartially() bool {

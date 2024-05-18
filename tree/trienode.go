@@ -1,5 +1,5 @@
 //
-// Copyright 2022 Sean C Foley
+// Copyright 2022-2024 Sean C Foley
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -171,79 +171,6 @@ func (result *opResult[E, V]) addContaining(containingSub *BinTrieNode[E, V]) {
 		}
 		result.containingEnd = node
 	}
-}
-
-type TrieKeyIterator[E TrieKey[E]] interface {
-	HasNext
-
-	Next() E
-
-	// Remove removes the last iterated element from the underlying trie, and returns that element.
-	// If there is no such element, it returns the zero value.
-	Remove() E
-}
-
-type trieKeyIterator[E TrieKey[E]] struct {
-	keyIterator[E]
-}
-
-func (iter trieKeyIterator[E]) Next() E {
-	return iter.keyIterator.Next()
-}
-
-func (iter trieKeyIterator[E]) Remove() E {
-	return iter.keyIterator.Remove()
-}
-
-type TrieNodeIterator[E TrieKey[E], V any] interface {
-	HasNext
-
-	Next() *BinTrieNode[E, V]
-}
-
-type TrieNodeIteratorRem[E TrieKey[E], V any] interface {
-	TrieNodeIterator[E, V]
-
-	// Remove removes the last iterated element from the underlying trie, and returns that element.
-	// If there is no such element, it returns the zero value.
-	Remove() *BinTrieNode[E, V]
-}
-
-type trieNodeIteratorRem[E TrieKey[E], V any] struct {
-	nodeIteratorRem[E, V]
-}
-
-func (iter trieNodeIteratorRem[E, V]) Next() *BinTrieNode[E, V] {
-	return toTrieNode(iter.nodeIteratorRem.Next())
-}
-
-func (iter trieNodeIteratorRem[E, V]) Remove() *BinTrieNode[E, V] {
-	return toTrieNode(iter.nodeIteratorRem.Remove())
-}
-
-type trieNodeIterator[E TrieKey[E], V any] struct {
-	nodeIterator[E, V]
-}
-
-func (iter trieNodeIterator[E, V]) Next() *BinTrieNode[E, V] {
-	return toTrieNode(iter.nodeIterator.Next())
-}
-
-type CachingTrieNodeIterator[E TrieKey[E], V any] interface {
-	TrieNodeIteratorRem[E, V]
-	CachingIterator
-}
-
-type cachingTrieNodeIterator[E TrieKey[E], V any] struct {
-	cachingNodeIterator[E, V] // an interface
-}
-
-func (iter *cachingTrieNodeIterator[E, V]) Next() *BinTrieNode[E, V] {
-	return toTrieNode(iter.cachingNodeIterator.Next())
-}
-
-func (iter *cachingTrieNodeIterator[E, V]) Remove() *BinTrieNode[E, V] {
-	return toTrieNode(iter.cachingNodeIterator.Remove())
 }
 
 // KeyCompareResult has callbacks for a key comparison of a new key with a key pre-existing in the trie.

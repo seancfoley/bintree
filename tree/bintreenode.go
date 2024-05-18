@@ -1,5 +1,5 @@
 //
-// Copyright 2022 Sean C Foley
+// Copyright 2022-2024 Sean C Foley
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -943,7 +943,8 @@ func (node *binTreeNode[E, V]) TreeString(withNonAddedKeys, withSizes bool) stri
 	return builder.String()
 }
 
-func (node *binTreeNode[E, V]) printTree(builder *strings.Builder,
+func (node *binTreeNode[E, V]) printTree(
+	builder *strings.Builder,
 	initialIndents indents,
 	withNonAdded,
 	withSizes bool) {

@@ -174,13 +174,16 @@ func (trie *BinTrie[E, V]) addNode(result *opResult[E, V], fromNode *BinTrieNode
 }
 
 func (trie *BinTrie[E, V]) addTrie(addedTreeNode *BinTrieNode[E, V], withValues bool) *BinTrieNode[E, V] {
-	return addTrie(trie, addedTreeNode, withValues, func(e E) E { return e }, func(v V) V { return v })
+	var valueMap func(V) V
+	if withValues {
+		valueMap = func(v V) V { return v }
+	}
+	return addTrie(trie, addedTreeNode, func(e E) E { return e }, valueMap)
 }
 
 func addTrie[ED TrieKey[ED], ES TrieKey[ES], VD, VS any](
 	targetTrie *BinTrie[ED, VD],
 	sourceNode *BinTrieNode[ES, VS],
-	withValues bool,
 	keyMap func(ES) ED,
 	valueMap func(VS) VD) *BinTrieNode[ED, VD] {
 	if sourceNode == nil { // addedTreeNode can be nil when the root of a zero-valued trie
@@ -197,7 +200,7 @@ func addTrie[ED TrieKey[ED], ES TrieKey[ES], VD, VS any](
 	root := targetTrie.EnsureRoot(firstKey)
 	firstAdded := toAdd.IsAdded()
 	if firstAdded {
-		if withValues {
+		if valueMap != nil {
 			result.newValue = valueMap(toAdd.GetValue())
 			// new value assignment
 		}
@@ -216,7 +219,7 @@ func addTrie[ED TrieKey[ED], ES TrieKey[ES], VD, VS any](
 			result.key = keyMap(addrNext)
 			result.existingNode = nil
 			result.inserted = nil
-			if withValues {
+			if valueMap != nil {
 				result.newValue = valueMap(toAdd.GetValue())
 				// new value assignment
 			}
@@ -283,17 +286,17 @@ func (trie *BinTrie[E, V]) AddTrie(trieNode *BinTrieNode[E, V]) *BinTrieNode[E, 
 // AddConvertibleTrie maps from one trie type to another.
 // The keys must follow the same containment structure, meaning any sub-node to parent-node relationship must be maintained across mappings.
 // If the containment structure is not maintained, then do not use this function, instead simply iterate through the source trie and add each to the target trie.
+// If the valueMap is non-nil, then the values will be mapped by that function, otherwise the new values will all be zero values.
 func AddConvertibleTrie[ED TrieKey[ED], ES TrieKey[ES], VD, VS any](
 	target *BinTrie[ED, VD],
 	sourceNode *BinTrieNode[ES, VS],
-	withValues bool,
 	keyMap func(ES) ED,
 	valueMap func(VS) VD) *BinTrieNode[ED, VD] {
 	if sourceNode == nil {
 		return nil
 	}
 	target.EnsureRoot(keyMap(sourceNode.GetKey()))
-	return addTrie(target, sourceNode, withValues, keyMap, valueMap)
+	return addTrie(target, sourceNode, keyMap, valueMap)
 }
 
 func (trie *BinTrie[E, V]) Contains(key E) bool {

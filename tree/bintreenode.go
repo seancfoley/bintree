@@ -916,16 +916,13 @@ func NodeString[E Key, V any](node nodePrinter[E, V]) string {
 	}
 	key := node.GetKey()
 	val := node.GetValue()
-	if _, ok := any(val).(EmptyValueType); ok || isNil(val) {
-		if node.IsAdded() {
-			return fmt.Sprint(addedNodeCircle, " ", key)
-		}
+
+	if !node.IsAdded() {
 		return fmt.Sprint(nonAddedNodeCircle, " ", key)
+	} else if _, ok := any(val).(EmptyValueType); ok || isNil(val) {
+		return fmt.Sprint(addedNodeCircle, " ", key)
 	}
-	if node.IsAdded() {
-		return fmt.Sprint(addedNodeCircle, " ", key, " = ", val)
-	}
-	return fmt.Sprint(nonAddedNodeCircle, " ", key, " = ", val)
+	return fmt.Sprint(addedNodeCircle, " ", key, " = ", val)
 }
 
 type indents struct {

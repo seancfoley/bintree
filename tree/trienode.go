@@ -1371,7 +1371,7 @@ func (node *BinTrieNode[E, V]) BlockSizeCachingAllNodeIterator() CachingTrieNode
 	return &cachingTrieNodeIterator[E, V]{&iter}
 }
 
-func (node *BinTrieNode[E, V]) ContainingFirstIterator(forwardSubNodeOrder bool) CachingTrieNodeIterator[E, V] {
+func (node *BinTrieNode[E, V]) ContainingFirstIterator(forwardSubNodeOrder bool) TrieNodeIteratorRem[E, V] {
 	return &cachingTrieNodeIterator[E, V]{node.toBinTreeNode().containingFirstIterator(forwardSubNodeOrder)}
 }
 

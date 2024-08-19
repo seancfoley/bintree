@@ -477,7 +477,7 @@ func (trie *BinTrie[E, V]) BlockSizeCachingAllNodeIterator() CachingTrieNodeIter
 	return trie.absoluteRoot().BlockSizeCachingAllNodeIterator()
 }
 
-func (trie *BinTrie[E, V]) ContainingFirstIterator(forwardSubNodeOrder bool) CachingTrieNodeIterator[E, V] {
+func (trie *BinTrie[E, V]) ContainingFirstIterator(forwardSubNodeOrder bool) TrieNodeIteratorRem[E, V] {
 	return trie.absoluteRoot().ContainingFirstIterator(forwardSubNodeOrder)
 }
 
